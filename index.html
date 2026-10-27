@@ -597,7 +597,7 @@ body {
 }
 .topic-body { flex: 1; min-width: 0; }
 .topic-body h3 { font-size: 13.5px; font-weight: 550; line-height: 1.5; }
-.topic-meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.topic-meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 .topic-go { flex: 0 0 auto; color: #C4C8CE; align-self: center; }
 
 /* ---------- 素材 ---------- */
@@ -907,7 +907,7 @@ img.hist-media { cursor: pointer; }
   background: #fff;
   border-radius: 20px 20px 0 0;
   padding: 8px 16px 20px;
-  max-height: 82%;
+  max-height: 88%;
   overflow-y: auto;
   animation: slideUp .26s cubic-bezier(.22,.7,.3,1);
   scrollbar-width: none;
@@ -1551,13 +1551,128 @@ img.hist-media { cursor: pointer; }
 }
 .contact-wx b { color: #14171A; letter-spacing: .3px; }
 
+/* ========== 排期：选题 → 时间段 ========== */
+.topic-plan {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.topic-plan:last-child { border-bottom: none; }
+.topic-plan-body { flex: 1; min-width: 0; }
+.topic-plan-body b {
+  display: block; font-size: 13px; font-weight: 550; line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.topic-plan .btn { flex: 0 0 auto; white-space: nowrap; }
+
+.slot-plan {
+  margin-top: 9px; padding: 9px 10px;
+  background: #F7F8FA; border-radius: 9px;
+}
+.slot-plan-main {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: 12.5px; line-height: 1.5; color: #333;
+}
+.slot-plan-main .tag { flex: 0 0 auto; }
+.slot-plan-main b {
+  font-weight: 550; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.slot-plan .slot-note { margin-top: 5px; }
+
+/* 时间段选择面板 */
+.slot-pick {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.slot-pick:last-child { margin-bottom: 0; }
+.slot-pick:active { transform: scale(.995); }
+.slot-pick.active {
+  border-color: var(--green);
+  background: #F2FBF6;
+}
+.slot-pick b {
+  font-size: 13px; font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  display: block;
+}
+.slot-pick span {
+  font-size: 11px; color: var(--sub);
+  display: block; margin-top: 2px;
+}
+.slot-pick em {
+  font-style: normal;
+  font-size: 11px; color: var(--sub);
+  flex: 0 1 auto; min-width: 0;
+  text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slot-pick em.busy { color: #A86400; }
+
+/* 云端同步卡片头 */
+.cloud-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13.5px;
+}
+.cloud-head b { font-weight: 650; color: #14171A; }
+.cloud-head .tag { margin-left: auto; }
+
 </style>
-<script>window.__BUILTIN_RULES__ = {
+</head>
+<body>
+<div class="stage">
+  <div class="device">
+    <div class="island"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span id="clock">9:41</span>
+      </div>
+
+      <main id="view"></main>
+
+      <nav class="tabbar" id="tabbar">
+        <button class="tab active" data-tab="home" onclick="App.tab('home')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.4 12 3.4l8.5 7v9.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z"/><path d="M9.5 21v-6.4h5V21"/></svg>
+          <span>工作台</span>
+        </button>
+        <button class="tab" data-tab="create" onclick="App.tab('create')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.6 4.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L8.4 19.6 3.6 20.4l.8-4.8z"/><path d="m14 6 4 4"/></svg>
+          <span>创作</span>
+        </button>
+        <button class="tab" data-tab="topics" onclick="App.tab('topics')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 18h5.6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6V16h5.6v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/></svg>
+          <span>选题</span>
+        </button>
+        <button class="tab" data-tab="materials" onclick="App.tab('materials')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.6"/><circle cx="8.6" cy="9.4" r="1.6"/><path d="m4.4 17.4 4.8-4.6a1.6 1.6 0 0 1 2.2 0l2.3 2.2 1.8-1.7a1.6 1.6 0 0 1 2.2 0l2.3 2.2"/></svg>
+          <span>素材</span>
+        </button>
+        <button class="tab" data-tab="more" onclick="App.tab('more')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.6 20.2c.6-3.5 3.6-5.6 7.4-5.6s6.8 2.1 7.4 5.6"/></svg>
+          <span>我的</span>
+        </button>
+      </nav>
+      <div class="home-bar"><i></i></div>
+
+      <div id="sheet-root"></div>
+      <div id="toast" class="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script>window.__BUILTIN_RULES__={
  "ok": true,
  "version": "v20251023-98f871",
- "checkedAt": "2026-10-27 08:47",
+ "checkedAt": "2026-10-27 09:01",
  "nextCheck": "每天 00:00 自动",
- "reason": "startup",
+ "reason": "manual",
  "sources": [
   {
    "key": "wechat-personal",
@@ -1746,49 +1861,8 @@ img.hist-media { cursor: pointer; }
   }
  ]
 };</script>
-</head>
-<body>
-<div class="stage">
-  <div class="device">
-    <div class="island"></div>
-    <div class="screen">
-      <div class="statusbar">
-        <span id="clock">9:41</span>
-      </div>
-
-      <main id="view"></main>
-
-      <nav class="tabbar" id="tabbar">
-        <button class="tab active" data-tab="home" onclick="App.tab('home')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.4 12 3.4l8.5 7v9.2a1.4 1.4 0 0 1-1.4 1.4H4.9a1.4 1.4 0 0 1-1.4-1.4z"/><path d="M9.5 21v-6.4h5V21"/></svg>
-          <span>工作台</span>
-        </button>
-        <button class="tab" data-tab="create" onclick="App.tab('create')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.6 4.4a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8L8.4 19.6 3.6 20.4l.8-4.8z"/><path d="m14 6 4 4"/></svg>
-          <span>创作</span>
-        </button>
-        <button class="tab" data-tab="topics" onclick="App.tab('topics')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 18h5.6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6V16h5.6v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/></svg>
-          <span>选题</span>
-        </button>
-        <button class="tab" data-tab="materials" onclick="App.tab('materials')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.6"/><circle cx="8.6" cy="9.4" r="1.6"/><path d="m4.4 17.4 4.8-4.6a1.6 1.6 0 0 1 2.2 0l2.3 2.2 1.8-1.7a1.6 1.6 0 0 1 2.2 0l2.3 2.2"/></svg>
-          <span>素材</span>
-        </button>
-        <button class="tab" data-tab="more" onclick="App.tab('more')">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.6 20.2c.6-3.5 3.6-5.6 7.4-5.6s6.8 2.1 7.4 5.6"/></svg>
-          <span>我的</span>
-        </button>
-      </nav>
-      <div class="home-bar"><i></i></div>
-
-      <div id="sheet-root"></div>
-      <div id="toast" class="toast"></div>
-    </div>
-  </div>
-</div>
-
 <script>
+/* data.js */
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -1941,10 +2015,16 @@ window.SEED = {
     videos: []
   },
 
-  // 生成设置：图片接口（OpenAI 兼容）、永久更新源
+  // 生成设置：图片接口（OpenAI 兼容）、永久更新源、云端同步（Supabase）
   settings: {
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
-    updateUrl: ""
+    updateUrl: "",
+    cloud: {
+      url: "https://cvhbpiggofkpsynyplss.supabase.co",
+      key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aGJwaWdnb2ZrcHN5bnlwbHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTk1NjksImV4cCI6MjEwODY3NTU2OX0.MQQT6To8tmYskadlPinZE_vExsQJf4n18dBrg6CA9NU",
+      account: "",
+      auto: true
+    }
   },
 
   drafts: [],
@@ -2223,6 +2303,7 @@ window.SEED = {
 
 </script>
 <script>
+/* core.js */
 /* 核心：状态、合规引擎、生成引擎、工具函数 */
 (function () {
   const KEY = "pyq_store_v1";
@@ -2307,10 +2388,18 @@ window.SEED = {
               m.category = mapped;
             });
           }
-          // 生成设置默认值（图片接口 / 永久更新源）
+          // 生成设置默认值（图片接口 / 永久更新源 / 云同步）
           if (!s.settings) s.settings = {};
           if (!s.settings.imageApi) s.settings.imageApi = { base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
           if (typeof s.settings.updateUrl !== "string") s.settings.updateUrl = "";
+          if (!s.settings.cloud || typeof s.settings.cloud !== "object") {
+            s.settings.cloud = { url: "", key: "", account: "", auto: true };
+          }
+          // 老用户升级：自动补上内置云端地址与 key（用户自己填过的不覆盖）
+          const seedCloud = (window.SEED && SEED.settings && SEED.settings.cloud) || {};
+          if (!s.settings.cloud.url && seedCloud.url) s.settings.cloud.url = seedCloud.url;
+          if (!s.settings.cloud.key && seedCloud.key) s.settings.cloud.key = seedCloud.key;
+          if (typeof s.settings.cloud.auto !== "boolean") s.settings.cloud.auto = true;
           if (s.materials) {
             // 清理旧版失效图片：接口已下线，预览必然失败
             s.materials.images = (s.materials.images || []).filter((img) => !/tool_text_to_image/.test(img.src || ""));
@@ -2320,6 +2409,8 @@ window.SEED = {
           // 历史 / 拦截记录区分文案、图片、视频
           (s.history || []).forEach((h) => { if (!h.kind) h.kind = "text"; });
           (s.blocks || []).forEach((b) => { if (!b.kind) b.kind = "text"; });
+          // 排期条目补 topicId：区分「选题排期」与「文案加入排期」
+          (s.schedule || []).forEach((x) => { if (typeof x.topicId !== "string") x.topicId = ""; });
           return s;
         }
       }
@@ -2893,6 +2984,7 @@ window.SEED = {
       const type = store.types.find((x) => x.name === typeName) || store.types[0];
       return {
         slotId: slot.id,
+        topicId: tid || "",
         status: "待排",
         type: topic ? topic.type : type.id,
         text: topic ? topic.title : "",
@@ -2920,6 +3012,7 @@ window.SEED = {
     return iso.slice(5, 10) + " " + iso.slice(11, 16);
   }
   function typeById(id) { return store.types.find((t) => t.id === id); }
+  function topicById(id) { return (store.topics || []).find((t) => t.id === id); }
   function uid(prefix) { return prefix + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5); }
   /* ---------- 个人资料（按账号隔离，注册后由用户填写） ---------- */
   function blankSections() {
@@ -3065,10 +3158,12 @@ window.SEED = {
   function save() {
     try {
       localStorage.setItem(KEY, JSON.stringify(store));
-      return true;
     } catch (e) {
       return false;
     }
+    // 本地保存成功后再通知云端做防抖推送（未配置/未登录时为空操作）
+    try { if (window.Cloud && window.Cloud.markDirty) window.Cloud.markDirty(); } catch (e) {}
+    return true;
   }
 
   /* ---------- 在线规则库（服务端每日 0 点抓取官方规则） ---------- */
@@ -3094,7 +3189,7 @@ window.SEED = {
   window.Core = {
     store, ui, save, checkText, replaceText, highlight, foldInfo,
     generate, polish, applyStyles, escapeHtml, nowISO, todayKey, now, syncServerTime,
-    timeAgo, typeById, uid, DEFAULTS, SIZE_LABEL, SHORT_MAX, applyLiveRules,
+    timeAgo, typeById, topicById, uid, DEFAULTS, SIZE_LABEL, SHORT_MAX, applyLiveRules,
     CATEGORY_REASON, LEGACY_COPY_TYPE,
     bindProfile, saveProfile, hasProfile, persona, topicFor, syncSummaries, blankSections,
     ensureDaily, todayTopicList
@@ -3103,6 +3198,7 @@ window.SEED = {
 
 </script>
 <script>
+/* icons.js */
 /* 图标与通用渲染片段 */
 (function () {
   const S = (paths, size) =>
@@ -3167,6 +3263,7 @@ window.SEED = {
 
 </script>
 <script>
+/* views-home.js */
 /* 页面：工作台 + 文案创作入口 */
 (function () {
   const { store, ui } = Core;
@@ -3330,6 +3427,7 @@ window.SEED = {
 
 </script>
 <script>
+/* views-compose.js */
 /* 页面：创作工作区（AI 生成 / 自由创作 + 合规拦截 + 朋友圈预览） */
 (function () {
   const { store, ui } = Core;
@@ -3549,6 +3647,7 @@ window.SEED = {
 
 </script>
 <script>
+/* views-library.js */
 /* 页面：选题库 + 素材库 */
 (function () {
   const { store, ui } = Core;
@@ -3571,6 +3670,8 @@ window.SEED = {
 
     const cards = shown.map((t, i) => {
       const type = Core.typeById(t.type);
+      const item = (store.schedule || []).find((x) => x.topicId === t.id);
+      const slot = item ? store.slots.find((s) => s.id === item.slotId) : null;
       return (
         '<div class="topic-card" onclick="App.topicToCompose(\'' + t.id + '\')">' +
           '<div class="topic-index">' + (i + 1 < 10 ? "0" : "") + (i + 1) + "</div>" +
@@ -3579,9 +3680,11 @@ window.SEED = {
             '<div class="topic-meta">' +
               '<span class="tag blue">' + t.direction + "</span>" +
               (type ? '<span class="tag gray">' + type.name + "</span>" : "") +
+              (slot ? '<span class="tag green">' + slot.time.split("-")[0] + "</span>" : "") +
             "</div>" +
           "</div>" +
-          '<span class="topic-go">' + icon("right", 16) + "</span>" +
+          '<button class="btn ghost small" style="flex:0 0 auto;align-self:center" onclick="event.stopPropagation();App.openSlotPicker(\'' + t.id + '\')">' +
+            (slot ? "改时段" : "排期") + "</button>" +
         "</div>"
       );
     }).join("");
@@ -3740,33 +3843,70 @@ window.SEED = {
 
 </script>
 <script>
+/* views-more.js */
 /* 页面：排期 / 资料库 / 历史 / 合规检测 / 云盘同步 / 我的 */
 (function () {
   const { store, ui } = Core;
   const icon = UI.icon;
 
-  /* ---------- 发布时间排期 ---------- */
+  /* ---------- 发布时间排期（今日选题 ↔ 时间段） ---------- */
   function renderSchedule() {
     const n = Core.now();
     const hm = n.getHours() * 60 + n.getMinutes();
+    const schedule = store.schedule || [];
+    const topicList = Core.todayTopicList();
+    const planned = topicList.filter((t) => schedule.some((x) => x.topicId === t.id)).length;
+
+    // 今日选题：每条后面可直接安排 / 调整时间段
+    const topicRows = topicList.map((t, i) => {
+      const item = schedule.find((x) => x.topicId === t.id);
+      const slot = item ? store.slots.find((s) => s.id === item.slotId) : null;
+      const type = Core.typeById(t.type);
+      return (
+        '<div class="topic-plan">' +
+          '<div class="topic-index">' + (i + 1 < 10 ? "0" : "") + (i + 1) + "</div>" +
+          '<div class="topic-plan-body">' +
+            "<b>" + Core.escapeHtml(t.title) + "</b>" +
+            '<div class="topic-meta">' +
+              (type ? '<span class="tag gray">' + type.name + "</span>" : "") +
+              (slot ? '<span class="tag green">' + slot.time + "</span>" : '<span class="tag gray">未安排</span>') +
+            "</div>" +
+          "</div>" +
+          '<button class="btn soft small" onclick="App.openSlotPicker(\'' + t.id + '\')">' +
+            (slot ? "改时段" : "安排") + "</button>" +
+        "</div>"
+      );
+    }).join("");
+
     const cards = store.slots.map((s) => {
       const start = s.time.split("-")[0].split(":");
       const live = hm >= parseInt(start[0]) * 60 + parseInt(start[1]);
-      const item = (store.schedule || []).find((x) => x.slotId === s.id);
-      const t = item && item.type ? Core.typeById(item.type) : null;
+      const item = schedule.find((x) => x.slotId === s.id) || {};
+      const tp = item.topicId ? Core.topicById(item.topicId) : null;
+      const t = item.type ? Core.typeById(item.type) : null;
+      const has = !!(tp || item.text);
       const levelTag = s.level === "黄金" ? "green" : s.level === "小黄金" ? "orange" : s.level === "睡前" ? "blue" : "gray";
       const cls = s.level === "黄金" ? "gold" : s.level === "小黄金" ? "mini-gold" : s.level === "睡前" ? "bed" : "";
       return (
         '<div class="slot-card ' + cls + '">' +
           '<div class="slot-top"><span class="slot-t">' + s.time + "</span>" +
-            '<span class="tag ' + levelTag + '">' + s.level + "档" + (live && !item ? " · 已过" : "") + "</span></div>" +
+            '<span class="tag ' + levelTag + '">' + s.level + "档" + (live && !has ? " · 已过" : "") + "</span></div>" +
           '<div class="slot-desc">' + s.scene + " · " + s.title + "</div>" +
           '<div class="slot-types">' + s.types.map((x) => '<span class="tag gray">' + x + "</span>").join("") + "</div>" +
+          (has
+            ? '<div class="slot-plan">' +
+                '<div class="slot-plan-main">' +
+                  (tp ? '<span class="tag blue">选题</span>' : '<span class="tag orange">文案</span>') +
+                  "<b>" + Core.escapeHtml(tp ? tp.title : item.text) + "</b>" +
+                "</div>" +
+                '<div class="slot-note">' + (item.status || "待排") + (t ? " · " + t.name : "") + "</div>" +
+              "</div>"
+            : '<div class="slot-note">暂未安排</div>') +
           '<div class="slot-act">' +
-            '<span class="slot-note">' + (item ? item.status + (t ? " · " + t.name : "") : "暂未安排") + "</span>" +
-            (item && item.status === "待发布"
+            (item.status === "待发布"
               ? '<button class="btn soft small" onclick="App.publishSlot(\'' + s.id + '\')">标记已发布</button>'
-              : '<button class="btn ghost small" onclick="App.fillSlot(\'' + s.id + '\')">' + (item ? "换一条" : "排一条") + "</button>") +
+              : '<button class="btn ghost small" onclick="App.fillSlot(\'' + s.id + '\')">去创作</button>') +
+            (has ? '<button class="btn ghost small" onclick="App.clearSlot(\'' + s.id + '\')">移出</button>' : "") +
           "</div>" +
         "</div>"
       );
@@ -3774,25 +3914,16 @@ window.SEED = {
 
     return (
       '<div class="page">' +
-        UI.head("发布时间排期", "每天 0 点联网自动刷新", "", true) +
+        UI.head("发布时间排期", "选题 + 时段，可自由调换", "", true) +
         '<div class="notice">' + icon("clock", 15) +
-          "<span>每天 2-4 条，相邻间隔至少 2 小时；每周留 1 天轻发，给账号降降温。今日排期已按联网校时后的日期自动生成，各时段内容互不重复。</span>" +
+          "<span>每天 0 点自动按今日选题生成一版排期；点「安排 / 改时段」可以把任意选题放到任意时段，已有选题会自动换位，不会丢内容。</span>" +
         "</div>" +
-        '<div class="card" style="margin-top:12px">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:14px">内容黄金比例</b><span class="muted">4 : 3 : 2 : 1</span></div>' +
-          '<div class="ratio-big">' +
-            '<i style="width:40%;background:#07C160"></i><i style="width:30%;background:#5B8FF9"></i>' +
-            '<i style="width:20%;background:#FF9F43"></i><i style="width:10%;background:#FF6B81"></i>' +
-          "</div>" +
-          '<div class="legend">' +
-            '<span><b style="background:#07C160"></b>干货 40%</span>' +
-            '<span><b style="background:#5B8FF9"></b>生活 30%</span>' +
-            '<span><b style="background:#FF9F43"></b>互动 20%</span>' +
-            '<span><b style="background:#FF6B81"></b>转化 10%</span>' +
-          "</div>" +
-        "</div>" +
+        '<div class="section-title"><h2>今日选题</h2><span>' + planned + " / " + topicList.length + " 已安排</span></div>" +
+        '<div class="card" style="padding:2px 14px">' + (topicRows || UI.empty("今天还没有选题，去选题库添加", "bulb")) + "</div>" +
         '<div class="section-title"><h2>今日时段</h2><span>' + Core.todayKey() + "</span></div>" +
         cards +
+        '<div class="hint">' + icon("bulb", 14) +
+          "<span>时段顺序按「黄金 40% 干货 / 30% 生活 / 20% 互动 / 10% 转化」推荐，每天 2-4 条，间隔至少 2 小时。</span></div>" +
       "</div>"
     );
   }
@@ -3995,6 +4126,61 @@ window.SEED = {
     );
   }
 
+  /* ---------- 云端同步（Supabase） ---------- */
+  function cloudCard() {
+    const c = (store.settings && store.settings.cloud) || {};
+    const on = !!window.Cloud;
+    const configured = on && Cloud.configured();
+    const session = on && Cloud.hasSession();
+    const u = session ? Cloud.user() : null;
+    const st = on ? Cloud.state() : {};
+    const tag = session
+      ? '<span class="tag green">已连接</span>'
+      : configured ? '<span class="tag orange">未登录</span>' : '<span class="tag gray">未配置</span>';
+
+    const account = session && u
+      ? "已登录：" + Core.escapeHtml((u.email || "").replace(/@pyq\.local$/, ""))
+      : "用手机号或邮箱注册 / 登录；手机号会自动转成 手机号@pyq.local";
+
+    return (
+      '<div class="section-title"><h2>云端同步</h2><span>网页版 / APP 互通</span></div>' +
+      '<div class="card">' +
+        '<div class="cloud-head">' + icon("cloud", 15) + "<b>Supabase 云端账号</b>" + tag + "</div>" +
+        '<div class="muted" style="margin:6px 0 10px">在任意版本注册同一个云账号，资料、文案、素材、选题、排期都会自动互通。</div>' +
+        '<div' + (session ? ' style="display:none"' : '') + '>' +
+        '<div class="field"><label>Project URL</label>' +
+          '<input class="input" id="clUrl" placeholder="https://xxxx.supabase.co" value="' + Core.escapeHtml(c.url || "") + '" /></div>' +
+        '<div class="field"><label>anon public key</label>' +
+          '<input class="input" id="clKey" placeholder="eyJhbGciOi..." value="' + Core.escapeHtml(c.key || "") + '" /></div>' +
+        '<button class="btn ghost small block" onclick="App.saveCloudCfg()">保存云端配置</button>' +
+        '<div class="field" style="margin-top:12px"><label>云账号（手机号 / 邮箱）</label>' +
+          '<input class="input" id="clAccount" placeholder="13800138000 或 you@mail.com" value="' + Core.escapeHtml(c.account || "") + '" /></div>' +
+        '<div class="field"><label>密码（6 位以上）</label>' +
+          '<input class="input" id="clPwd" type="password" placeholder="登录密码" /></div>' +
+        '<div class="btn-row">' +
+          '<button class="btn ghost small" onclick="App.cloudAuth(\'up\')">注册并登录</button>' +
+          '<button class="btn primary small" onclick="App.cloudAuth(\'in\')">登录</button>' +
+        "</div>" +
+        '<div class="muted" style="margin-top:8px">' + account + "</div>" + "</div>" +
+        (session
+          ? '<div class="muted">' + account + "</div>" +
+            '<div class="btn-row" style="margin-top:12px">' +
+              '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
+              '<button class="btn soft small" onclick="App.cloudPullNow()">从云端拉取</button>' +
+              '<button class="btn ghost small" onclick="App.cloudSignOut()">退出云账号</button>' +
+            "</div>" +
+            '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
+              "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传；每 3 分钟拉取一次</div></div>" +
+              '<label class="switch"><input type="checkbox" ' + (c.auto !== false ? "checked" : "") + ' onchange="App.toggleCloudAuto(this.checked)" /><i></i></label>' +
+            "</div>" +
+            '<div class="muted" style="margin-top:8px">上次上传：' + (st.lastPush ? Core.timeAgo(st.lastPush) : "—") +
+              " · 上次拉取：" + (st.lastPull ? Core.timeAgo(st.lastPull) : "—") + "</div>" +
+            (st.error ? '<div class="ar-err">' + Core.escapeHtml(st.error) + "</div>" : "")
+          : "") +
+      "</div>"
+    );
+  }
+
   /* ---------- 本地归档（已取消飞书云盘同步） ---------- */
   function renderSync() {
     const sync = ui.sync || {};
@@ -4008,7 +4194,7 @@ window.SEED = {
       ["选题库", "选题自动归档"],
       ["素材库", "文案 / 图片 / 视频"],
       ["历史生成记录", "生成 + 违规拦截记录"],
-      ["时间发布排期", "每日排期表"],
+      ["发布时间排期", "每日排期表"],
       ["合规检测", "风险词库与拦截记录"]
     ].map(([a, b]) => '<div class="map-row"><span>' + a + "</span><em>" + b + "</em></div>").join("");
 
@@ -4029,7 +4215,9 @@ window.SEED = {
 
     return (
       '<div class="page">' +
-        UI.head("本地归档", "手机本地 / 可导出查看", "", true) +
+        UI.head("云同步与本地归档", "跨版本同步 / 本机备份", "", true) +
+        cloudCard() +
+        '<div class="section-title"><h2>本机归档</h2><span>' + stateText + "</span></div>" +
         '<div class="sync-hero">' +
           '<div class="sync-top"><i class="sync-dot ' + dot + '"></i><span>' + stateText + "</span>" +
             '<span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.5)">' + (sync.last ? "上次 " + Core.timeAgo(sync.last) : "尚未归档") + "</span>" +
@@ -4042,15 +4230,17 @@ window.SEED = {
           "</div>" +
         "</div>" +
 
-        '<div class="card mt12" style="display:flex;align-items:center;justify-content:space-between">' +
-          '<div><b style="font-size:13.5px">保存后自动归档</b><div class="muted">生成、保存、改资料时自动写入本机</div></div>' +
-          '<label class="switch"><input type="checkbox" ' + (sync.auto ? "checked" : "") + ' onchange="App.toggleAutoSync(this.checked)" /><i></i></label>' +
-        "</div>" +
+        (nativeMode
+          ? '<div class="card mt12" style="display:flex;align-items:center;justify-content:space-between">' +
+              '<div><b style="font-size:13.5px">保存后自动归档</b><div class="muted">生成、保存、改资料时自动写入本机</div></div>' +
+              '<label class="switch"><input type="checkbox" ' + (sync.auto ? "checked" : "") + ' onchange="App.toggleAutoSync(this.checked)" /><i></i></label>' +
+            "</div>" +
+            '<button class="btn primary block mt12" onclick="App.syncNow()">' + icon("cloud", 17) +
+              (sync.state === "busy" ? "正在归档…" : "立即归档到本机") + "</button>"
+          : '<div class="card mt12"><b style="font-size:13.5px">网页版自动保存</b>' +
+              '<div class="muted" style="margin-top:4px">内容实时保存在浏览器；登录云账号后与 App 版互通，无需本机归档。</div></div>') +
 
-        '<button class="btn primary block mt12" onclick="App.syncNow()">' + icon("cloud", 17) +
-          (sync.state === "busy" ? "正在归档…" : "立即归档到本机") + "</button>" +
-
-        (sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '归档未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
+        (nativeMode && sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '归档未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
 
         storageCard +
 
@@ -4058,8 +4248,8 @@ window.SEED = {
         '<div class="card">' + maps + "</div>" +
         '<div class="hint">' + icon("cloud", 14) +
           "<span>" + (nativeMode
-            ? "全部内容只保存在本机，不上传任何服务器。图片/视频进手机相册，文案/选题/排期归档到 App 私有目录，需要查看时点上方按钮导出到 Documents。"
-            : "网页版无法写入手机存储，本地归档仅在 App 内可用。") +
+            ? "内容默认保存在本机；登录云账号后会自动上传到你的 Supabase，与网页版互通。图片/视频进手机相册，文案/选题/排期归档到 App 私有目录，需要查看时点上方按钮导出到 Documents。"
+            : "网页版内容保存在浏览器本地；登录云账号后，资料、文案、素材、选题、排期会与 App 版自动互通。") +
           "</span>" +
         "</div>" +
       "</div>"
@@ -4085,7 +4275,7 @@ window.SEED = {
       ["history", "clock", "#EEF3FF", "#5B8FF9", "历史生成记录", store.history.length + " 条"],
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
       ["schedule", "calendar", "#FFF5E9", "#FF9F43", "发布时间排期", "6 个黄金时段"],
-      ["sync", "cloud", "#E9F8F7", "#38B2AC", "本地归档", (ui.sync.pending || []).length ? "有待归档" : "本机存储"],
+      ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与归档", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
       ["update", "refresh", "#F0F1F5", "#4E5969", "检查更新", updateMenuNote()],
       ["contact", "user", "#F2F0FF", "#7A5AF8", "联系开发者", "微信号 " + (window.Auth ? Auth.wxId : "zhiyao0a1")]
     ].map(([page, ic, bg, color, label, note]) =>
@@ -4365,6 +4555,347 @@ window.SEED = {
 
 </script>
 <script>
+/* cloud.js */
+/* 云端账号 + 数据同步（Supabase 免费版）
+ * - 纯浏览器 fetch，网页版与 App（WebView）行为一致
+ * - 账号：手机号或邮箱 + 密码（手机号会自动转成 手机号@pyq.local）
+ * - 数据表：public.pyq_data(user_id uuid primary key, payload jsonb, updated_at timestamptz)
+ * - 策略：整包 last-write-wins；每次本地保存后防抖 2.5 秒自动上传
+ */
+(function () {
+  const SESSION_KEY = "pyq_cloud_session";
+  const TABLE = "pyq_data";
+  const PUSH_DELAY = 2500;
+  const MAX_BYTES = 6 * 1024 * 1024; // 单次上传体积上限，超出时丢弃内联图片
+
+  let session = loadSession();
+  let timer = null;
+  let pushing = false;
+  let suspended = false;
+  let state = { lastPush: "", lastPull: "", error: "", busy: false };
+
+  const listeners = [];
+  function emit() { listeners.forEach((fn) => { try { fn(state); } catch (e) {} }); }
+
+  function cfg() {
+    const s = (window.Core && Core.store && Core.store.settings) || {};
+    const c = s.cloud || {};
+    return {
+      url: String(c.url || "").trim().replace(/\/+$/, ""),
+      key: String(c.key || "").trim(),
+      account: String(c.account || "").trim(),
+      auto: c.auto !== false
+    };
+  }
+  function configured() { const c = cfg(); return !!(c.url && c.key); }
+  function hasSession() { return !!(session && session.access_token && session.user && session.user.id); }
+  function user() { return hasSession() ? session.user : null; }
+
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch (e) { return null; }
+  }
+  function saveSession(s) {
+    session = s;
+    try {
+      if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+      else localStorage.removeItem(SESSION_KEY);
+    } catch (e) {}
+  }
+
+  function toEmail(account) {
+    const a = String(account || "").trim();
+    if (!a) return "";
+    if (a.indexOf("@") >= 0) return a;
+    const phone = a.replace(/\D/g, "");
+    return phone.length === 11 ? phone + "@pyq.local" : a + "@pyq.local";
+  }
+
+  function errText(data, fallback) {
+    if (!data) return fallback || "请求失败";
+    return data.msg || data.error_description || data.error || data.message || fallback || "请求失败";
+  }
+
+  async function call(path, opts) {
+    const c = cfg();
+    if (!c.url || !c.key) throw new Error("请先填写 Supabase 地址和 anon key");
+    const o = opts || {};
+    const headers = Object.assign(
+      { apikey: c.key, "Content-Type": "application/json" },
+      o.headers || {}
+    );
+    if (o.auth !== false) {
+      const token = await ensureToken();
+      if (token) headers.Authorization = "Bearer " + token;
+    }
+    const res = await fetch(c.url + path, {
+      method: o.method || "GET",
+      headers: Object.assign(headers, o.prefer ? { Prefer: o.prefer } : {}),
+      body: o.body ? JSON.stringify(o.body) : undefined
+    });
+    let data = null;
+    const text = await res.text();
+    if (text) {
+      try { data = JSON.parse(text); } catch (e) { data = text; }
+    }
+    if (!res.ok) {
+      const e = new Error(errText(data, "HTTP " + res.status));
+      e.status = res.status;
+      e.data = data;
+      throw e;
+    }
+    return data;
+  }
+
+  /* ---------- 登录态 ---------- */
+  async function ensureToken() {
+    if (!hasSession()) return null;
+    const exp = Number(session.expires_at || 0);
+    if (exp && exp - 60 > Math.floor(Date.now() / 1000)) return session.access_token;
+    const c = cfg();
+    const res = await fetch(c.url + "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      headers: { apikey: c.key, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.access_token) {
+      saveSession(null);
+      throw new Error(errText(data, "登录已过期，请重新登录"));
+    }
+    saveSession(normalizeSession(data));
+    return session.access_token;
+  }
+
+  function normalizeSession(data) {
+    const expiresAt = Math.floor(Date.now() / 1000) + Number(data.expires_in || 3600);
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: expiresAt,
+      user: data.user || (session && session.user) || null
+    };
+  }
+
+  async function signUp(account, password) {
+    const email = toEmail(account);
+    if (!email) return { ok: false, error: "请填写手机号或邮箱" };
+    if (!password || password.length < 6) return { ok: false, error: "密码至少 6 位" };
+    try {
+      const data = await call("/auth/v1/signup", {
+        method: "POST", auth: false, body: { email: email, password: password }
+      });
+      if (!data || !data.access_token) {
+        return { ok: false, needConfirm: true, error: "注册成功，但 Supabase 开启了邮箱验证。请到 Supabase → Authentication → Providers → Email 关闭 Confirm email 后再登录。" };
+      }
+      saveSession(normalizeSession(data));
+      return { ok: true, user: session.user };
+    } catch (e) {
+      const msg = (e && e.message) || "注册失败";
+      return { ok: false, error: /already|registered|exists/i.test(msg) ? "该账号已注册，请直接登录" : msg };
+    }
+  }
+
+  async function signIn(account, password) {
+    const email = toEmail(account);
+    if (!email) return { ok: false, error: "请填写手机号或邮箱" };
+    if (!password) return { ok: false, error: "请填写密码" };
+    try {
+      const data = await call("/auth/v1/token?grant_type=password", {
+        method: "POST", auth: false, body: { email: email, password: password }
+      });
+      if (!data || !data.access_token) return { ok: false, error: "账号或密码不正确" };
+      saveSession(normalizeSession(data));
+      return { ok: true, user: session.user };
+    } catch (e) {
+      const msg = (e && e.message) || "登录失败";
+      return { ok: false, error: /invalid|credential/i.test(msg) ? "账号或密码不正确" : msg };
+    }
+  }
+
+  async function signOut() {
+    const c = cfg();
+    const token = session && session.access_token;
+    saveSession(null);
+    if (c.url && token) {
+      try {
+        await fetch(c.url + "/auth/v1/logout", {
+          method: "POST", headers: { apikey: c.key, Authorization: "Bearer " + token }
+        });
+      } catch (e) {}
+    }
+    emit();
+    return { ok: true };
+  }
+
+  /* ---------- 数据快照 ---------- */
+  function snapshot() {
+    const s = Core.store;
+    const snap = {
+      user: s.user,
+      profileSections: s.profileSections,
+      profileVersion: s.profileVersion,
+      profiles: s.profiles,
+      currentPhone: s.currentPhone,
+      types: s.types,
+      slots: s.slots,
+      topics: s.topics,
+      materials: s.materials,
+      drafts: s.drafts,
+      history: s.history,
+      blocks: s.blocks,
+      schedule: s.schedule,
+      dailyDate: s.dailyDate,
+      todayTopics: s.todayTopics,
+      recentTopicIds: s.recentTopicIds,
+      topicCycle: s.topicCycle,
+      words: s.words,
+      rules: s.rules,
+      rulesVersion: s.rulesVersion,
+      rulesLiveVersion: s.rulesLiveVersion,
+      seedCleaned: s.seedCleaned,
+      cloudUpdatedAt: s.cloudUpdatedAt || ""
+    };
+
+    // 体积保护：内联图片过大时丢弃 dataURL，避免上传失败
+    let json = JSON.stringify(snap);
+    if (json.length > MAX_BYTES) {
+      if (snap.materials && snap.materials.images) {
+        snap.materials.images = snap.materials.images.map((img) => {
+          if (/^data:/.test(img.src || "")) {
+            const copy = Object.assign({}, img);
+            copy.src = "";
+            copy.srcSkipped = true;
+            return copy;
+          }
+          return img;
+        });
+      }
+      json = JSON.stringify(snap);
+    }
+    return { payload: snap, size: json.length };
+  }
+
+  function applyRemote(payload, updatedAt) {
+    if (!payload) return false;
+    suspended = true;
+    try {
+      const s = Core.store;
+      const localSettings = s.settings;
+      Object.keys(s).forEach((k) => { delete s[k]; });
+      Object.assign(s, payload);
+      s.settings = localSettings || {};
+      s.cloudUpdatedAt = updatedAt || payload.cloudUpdatedAt || "";
+      // 兜底默认值，避免旧数据缺少字段导致页面报错
+      if (!s.materials) s.materials = { copy: [], images: [], videos: [] };
+      if (!s.profiles) s.profiles = {};
+      if (!s.dailyDate) s.dailyDate = "";
+      Core.save();
+    } finally {
+      suspended = false;
+    }
+    return true;
+  }
+
+  /* ---------- 上传 / 下载 ---------- */
+  async function push(silent) {
+    if (!configured() || !hasSession()) return { ok: false, error: "未登录云账号" };
+    if (pushing) return { ok: false, error: "正在上传" };
+    pushing = true;
+    state.busy = true;
+    emit();
+    try {
+      const c = cfg();
+      const u = user();
+      const snap = snapshot();
+      await call("/rest/v1/" + TABLE + "?on_conflict=user_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=minimal",
+        body: [{ user_id: u.id, payload: snap.payload, updated_at: new Date().toISOString() }]
+      });
+      const now = new Date().toISOString();
+      Core.store.cloudUpdatedAt = now;
+      try { localStorage.setItem("pyq_store_v1", JSON.stringify(Core.store)); } catch (e) {}
+      state.lastPush = now;
+      state.error = "";
+      if (!silent && window.App && App.toast) App.toast("已上传到云端");
+      return { ok: true, size: snap.size };
+    } catch (e) {
+      state.error = (e && e.message) || "上传失败";
+      if (!silent && window.App && App.toast) App.toast("云端上传失败：" + state.error);
+      return { ok: false, error: state.error };
+    } finally {
+      pushing = false;
+      state.busy = false;
+      emit();
+    }
+  }
+
+  async function pull(apply) {
+    if (!configured() || !hasSession()) return { ok: false, error: "未登录云账号" };
+    try {
+      const u = user();
+      const rows = await call("/rest/v1/" + TABLE + "?select=payload,updated_at&user_id=eq." + encodeURIComponent(u.id));
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (!row) return { ok: true, empty: true };
+      if (apply !== false) applyRemote(row.payload, row.updated_at);
+      state.lastPull = row.updated_at || "";
+      state.error = "";
+      return { ok: true, row: row };
+    } catch (e) {
+      state.error = (e && e.message) || "拉取失败";
+      return { ok: false, error: state.error };
+    }
+  }
+
+  /* 登录后对齐：云端更新则覆盖本地，否则把本地推上去 */
+  async function reconcile(silent) {
+    if (!configured() || !hasSession()) return { ok: false };
+    const r = await pull(false);
+    if (!r.ok) return r;
+    const local = Core.store.cloudUpdatedAt || "";
+    if (r.empty) {
+      const p = await push(true);
+      return { ok: p.ok, direction: "up" };
+    }
+    const remoteAt = r.row.updated_at || "";
+    if (remoteAt > local) {
+      applyRemote(r.row.payload, remoteAt);
+      if (!silent && window.App) { App.toast("已从云端同步最新内容"); App.render(true); }
+      return { ok: true, direction: "down" };
+    }
+    const p = await push(true);
+    return { ok: p.ok, direction: "up" };
+  }
+
+  /* ---------- 自动同步 ---------- */
+  function markDirty() {
+    if (suspended) return;
+    if (!configured() || !hasSession()) return;
+    if (!cfg().auto) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => { push(true).then(() => emit()); }, PUSH_DELAY);
+  }
+
+  async function init() {
+    if (!configured() || !hasSession()) return;
+    try { await reconcile(true); } catch (e) {}
+    emit();
+  }
+
+  function onChange(fn) { listeners.push(fn); }
+
+  window.Cloud = {
+    configured, hasSession, user, signUp, signIn, signOut,
+    push, pull: (apply) => pull(apply), reconcile, markDirty, init,
+    state: () => state, onChange, toEmail,
+    applyRemote: (payload, updatedAt) => applyRemote(payload, updatedAt),
+    snapshot
+  };
+})();
+
+</script>
+<script>
+/* native-app.js */
 /* Android App 桥接层：在独立安装的 App 内替代本地服务端
  * - 未配置服务器地址时：图片/视频直接保存到手机相册，文本归档写入 App 私有目录
  * - 配置了服务器地址时：沿用现有 /api/upload 与 /api/sync 上传飞书云盘
@@ -4519,6 +5050,7 @@ window.SEED = {
 
 </script>
 <script>
+/* auth.js */
 /* 账号 + 会员系统
  * - 未登录：全屏遮罩，必须先注册 / 登录才能使用
  * - 登录方式：密码登录 / 短信验证码登录 / 手机号注册
@@ -4671,16 +5203,62 @@ window.SEED = {
     return phone && acc ? fakeMe(phone, acc) : null;
   }
 
+  /* ---------------- 云端账号兜底：同一手机号在任意版本都能登录 ---------------- */
+
+  function cloudReady() {
+    return !!(window.Cloud && Cloud.configured());
+  }
+
+  // 本地没有该账号（或密码不一致）时，用云端账号验证身份并自动补建本地账号
+  async function cloudSignInFallback(phone, password) {
+    if (!cloudReady() || Cloud.hasSession()) return null;
+    let r;
+    try { r = await Cloud.signIn(phone, password); } catch (e) { return null; }
+    if (!r || !r.ok) return null;
+    Cloud.init().then(() => {
+      if (window.App && App.render) App.render(true);
+    }).catch(() => {});
+    return { name: "用户" + phone.slice(-4) };
+  }
+
+  // 注册时同步创建云端账号，让其他版本可以用同一账号登录
+  async function cloudSignUpQuiet(phone, nickname, password) {
+    if (!cloudReady() || Cloud.hasSession()) return;
+    try {
+      const r = await Cloud.signUp(phone, password);
+      if (r && r.ok) await Cloud.push(true);
+    } catch (e) {}
+  }
+
   async function login(phone, password) {
     phone = normPhone(phone);
     if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
     const e = pwdError(password);
     if (e) return { ok: false, error: e };
-    if (isNative) return call("authLogin", [phone, password]);
+    if (isNative) {
+      const r = await call("authLogin", [phone, password]);
+      if (r && r.ok) return r;
+      const cl = await cloudSignInFallback(phone, password);
+      if (cl) {
+        const reg = await call("authRegister", [phone, cl.name, password]);
+        if (reg && reg.ok) return call("authLogin", [phone, password]);
+      }
+      return r;
+    }
 
     const acc = fakeAccounts();
-    if (!acc[phone]) return { ok: false, error: "该手机号未注册，请先注册" };
-    if (acc[phone].hash !== fakeSha(password)) return { ok: false, error: "密码错误" };
+    if (!acc[phone] || acc[phone].hash !== fakeSha(password)) {
+      const cl = await cloudSignInFallback(phone, password);
+      if (cl) {
+        acc[phone] = acc[phone] || { name: cl.name, trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
+        acc[phone].hash = fakeSha(password);
+        fakeSave(acc);
+        localStorage.setItem(FAKE_SESSION, phone);
+        return { ok: true, me: fakeMe(phone, acc[phone]), cloud: true, msg: "已通过云端账号登录" };
+      }
+      if (!acc[phone]) return { ok: false, error: "该手机号未注册，请先注册" };
+      return { ok: false, error: "密码错误" };
+    }
     localStorage.setItem(FAKE_SESSION, phone);
     return { ok: true, me: fakeMe(phone, acc[phone]) };
   }
@@ -4693,13 +5271,18 @@ window.SEED = {
     if (ne) return { ok: false, error: ne };
     const e = pwdError(password);
     if (e) return { ok: false, error: e };
-    if (isNative) return call("authRegister", [phone, nickname, password]);
+    if (isNative) {
+      const r = await call("authRegister", [phone, nickname, password]);
+      if (r && r.ok) cloudSignUpQuiet(phone, nickname, password);
+      return r;
+    }
 
     const acc = fakeAccounts();
     if (acc[phone]) return { ok: false, error: "该手机号已注册，请直接登录" };
     acc[phone] = { name: nickname, hash: fakeSha(password), trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
     fakeSave(acc);
     localStorage.setItem(FAKE_SESSION, phone);
+    cloudSignUpQuiet(phone, nickname, password);
     return { ok: true, me: fakeMe(phone, acc[phone]), msg: "注册成功，免费试用 7 天已开启" };
   }
 
@@ -5359,6 +5942,7 @@ window.SEED = {
 
 </script>
 <script>
+/* app.js */
 /* 应用主控：导航、动作、云盘同步 */
 (function () {
   const { store, ui, save, nowISO, todayKey, uid, escapeHtml } = Core;
@@ -5640,22 +6224,158 @@ window.SEED = {
     toast("已存入成品文案库");
   }
 
+  /* 加入排期：先选发布时间段，再写入当日排期 */
   function addToSchedule() {
     const c = ensureCompose();
     if (!c.result || !c.check || !c.check.passed) { toast("合规通过后才能加入排期"); return; }
-    const preferred = ["s2", "s5", "s1"];
-    let slot = store.schedule.find((x) => preferred.indexOf(x.slotId) >= 0 && x.status === "待排");
-    if (!slot) {
-      slot = { slotId: "s5", status: "待发布", type: c.typeId, text: "", time: "20:00" };
-      store.schedule.push(slot);
+    const rows = store.slots.map((s) => {
+      const item = (store.schedule || []).find((x) => x.slotId === s.id) || {};
+      const busy = !!(item.text || item.topicId);
+      const label = busy
+        ? "已排：" + (item.topicId ? (Core.topicById(item.topicId) || {}).title || item.text : item.text)
+        : "空闲";
+      const mine = c.slotId === s.id;
+      return (
+        '<div class="slot-pick' + (mine ? " active" : "") + '" onclick="App.commitSchedule(\'' + s.id + '\')">' +
+          '<div><b>' + s.time + '</b><span>' + s.level + "档 · " + s.title + "</span></div>" +
+          '<em class="' + (busy ? "busy" : "") + '">' + escapeHtml(label) + "</em>" +
+        "</div>"
+      );
+    }).join("");
+    openSheet(
+      "<h3>选择发布时间段</h3>" +
+      '<div class="muted" style="margin:6px 0 12px">选一个时段加入今日排期，已有内容的时段会被这条替换。</div>' +
+      rows +
+      '<div class="sheet-actions"><button class="btn ghost" onclick="App.closeSheet()">取消</button></div>'
+    );
+  }
+
+  function commitSchedule(slotId) {
+    const slot = store.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    const cur = (store.schedule || []).find((x) => x.slotId === slotId);
+    const busyText = cur ? (cur.topicId ? ((Core.topicById(cur.topicId) || {}).title || "") : cur.text || "") : "";
+    if (busyText) {
+      openSheet(
+        "<h3>该时段已有内容</h3>" +
+        '<div class="muted" style="margin:6px 0 12px">' + slot.time + " 当前是「" + escapeHtml(busyText.slice(0, 20)) +
+          "」。替换后原内容会移出排期（选题仍在选题库，不会删除）。</div>" +
+        '<div class="sheet-actions">' +
+          '<button class="btn ghost" onclick="App.closeSheet()">取消</button>' +
+          '<button class="btn primary" onclick="App.doCommitSchedule(\'' + slotId + '\')">确认替换</button>' +
+        "</div>"
+      );
+      return;
     }
-    slot.type = c.typeId;
-    slot.status = "待发布";
-    slot.text = c.result.replace(/\n/g, " ").slice(0, 34);
+    doCommitSchedule(slotId);
+  }
+
+  function doCommitSchedule(slotId) {
+    const c = ensureCompose();
+    const slot = store.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    let item = (store.schedule || []).find((x) => x.slotId === slotId);
+    if (!item) {
+      item = { slotId: slotId, topicId: "", status: "待排", type: c.typeId, text: "", time: slot.time.split("-")[0] };
+      store.schedule.push(item);
+    }
+    item.type = c.typeId;
+    item.topicId = "";
+    item.status = "待发布";
+    item.text = c.result.replace(/\n/g, " ").slice(0, 40);
+    c.slotId = slotId;
     save();
     queueSchedule();
-    toast("已加入今日排期");
+    closeSheet();
     render();
+    toast("已加入 " + slot.time + " 排期");
+  }
+
+  /* 选题 ↔ 时间段：自由调整某条选题在哪个时段发布 */
+  function openSlotPicker(topicId) {
+    const tp = Core.topicById(topicId);
+    if (!tp) return;
+    const current = (store.schedule || []).find((x) => x.topicId === topicId);
+    const rows = store.slots.map((s) => {
+      const item = (store.schedule || []).find((x) => x.slotId === s.id) || {};
+      let note = "空闲";
+      if (item.topicId && item.topicId !== topicId) {
+        const other = Core.topicById(item.topicId);
+        note = "已排：" + (other ? other.title : item.text);
+      } else if (item.topicId === topicId) {
+        note = "当前安排";
+      } else if (item.text) {
+        note = "已排：" + item.text;
+      }
+      const mine = current && current.slotId === s.id;
+      return (
+        '<div class="slot-pick' + (mine ? " active" : "") + '" onclick="App.assignTopic(\'' + topicId + "','" + s.id + '\')">' +
+          '<div><b>' + s.time + '</b><span>' + s.level + "档 · " + s.title + "</span></div>" +
+          '<em class="' + (note === "空闲" || mine ? "" : "busy") + '">' + escapeHtml(note) + "</em>" +
+        "</div>"
+      );
+    }).join("");
+    openSheet(
+      "<h3>安排发布时间段</h3>" +
+      '<div class="muted" style="margin:6px 0 12px">' + escapeHtml(tp.title) + " · 已有选题的时段会自动换位，不会丢内容。</div>" +
+      rows +
+      '<div class="sheet-actions">' +
+        (current ? '<button class="btn ghost" onclick="App.clearSlot(\'' + current.slotId + '\')">移出排期</button>' : "") +
+        '<button class="btn ghost" onclick="App.closeSheet()">取消</button></div>'
+    );
+  }
+
+  function assignTopic(topicId, slotId) {
+    const tp = Core.topicById(topicId);
+    const slot = store.slots.find((s) => s.id === slotId);
+    if (!tp || !slot) return;
+    const list = store.schedule || [];
+    const prev = list.find((x) => x.topicId === topicId && x.slotId !== slotId) || null;
+    let target = list.find((x) => x.slotId === slotId);
+    if (!target) {
+      target = { slotId: slotId, topicId: "", status: "待排", type: "", text: "", time: slot.time.split("-")[0] };
+      list.push(target);
+    }
+    const otherId = target.topicId && target.topicId !== topicId ? target.topicId : "";
+    const other = otherId ? Core.topicById(otherId) : null;
+
+    // 该选题先离开原时段
+    if (prev) { prev.topicId = ""; prev.text = ""; prev.type = ""; prev.status = "待排"; }
+    // 目标时段原有的另一条选题换回原时段（真正互换，内容不丢）
+    if (otherId) {
+      if (prev) {
+        prev.topicId = otherId;
+        prev.type = other ? other.type : target.type;
+        prev.text = other ? other.title : target.text;
+        prev.status = "待排";
+      } else {
+        target.topicId = "";
+        target.text = "";
+      }
+    }
+    target.topicId = topicId;
+    target.type = tp.type;
+    target.text = tp.title;
+    target.status = "待排";
+    save();
+    queueSchedule();
+    closeSheet();
+    render();
+    toast("已安排到 " + slot.time + (other && prev ? "，与「" + other.title.slice(0, 8) + "…」互换" : other ? "，「" + other.title.slice(0, 8) + "…」已移出排期" : ""));
+  }
+
+  function clearSlot(slotId) {
+    const item = (store.schedule || []).find((x) => x.slotId === slotId);
+    if (!item) return;
+    item.topicId = "";
+    item.text = "";
+    item.type = "";
+    item.status = "待排";
+    save();
+    queueSchedule();
+    closeSheet();
+    render();
+    toast("已移出该时段");
   }
 
   function openDraft(id) {
@@ -6599,6 +7319,8 @@ window.SEED = {
     setMaterialTab, setMaterialCat, materialToCompose, copyMaterial, copyMaterialText,
     openMaterialAdd, saveMaterial, openImageSheet, generateImage,
     previewImage, previewVideo, previewHistoryMedia,
+    commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
+    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
       return v ? (v.url || videoPreviewUrls[id] || "") : "";
@@ -6724,14 +7446,14 @@ window.SEED = {
       return s.time + "（" + s.level + "）| " + s.scene + " | " + s.types.join("、") +
         (item ? " | 当前：" + item.status : " | 当前：未安排");
     });
-    return "朋友圈 AI 助手 · 时间发布排期\n更新时间：" + nowISO() +
+    return "朋友圈 AI 助手 · 发布时间排期\n更新时间：" + nowISO() +
       "\n\n黄金时间段总览：\n" + lines.join("\n") +
       "\n\n内容黄金比例（4:3:2:1）：干货 40% / 生活人设 30% / 互动引导 20% / 促销转化 10%" +
       "\n发布频率：每天 2-4 条，间隔至少 2 小时，每周留 1 天轻发。";
   }
 
   function queueSchedule() {
-    queueItem("时间发布排期", "每日发布排期表.txt", scheduleText());
+    queueItem("发布时间排期", "每日发布排期表.txt", scheduleText());
   }
 
   function wordsText() {
@@ -6757,7 +7479,7 @@ window.SEED = {
     store.materials.videos.forEach((v) => items.push({ folder: "素材库/视频库/" + v.source, name: v.id + "_视频说明.txt", content: "标题：" + v.title + "\n来源：" + v.source + "\n时间：" + v.time }));
     store.history.forEach((h) => items.push({ folder: "历史生成记录", name: h.id + "_" + (h.status === "已拦截" ? "拦截" : "通过") + ".txt", content: syncHeader({ type: h.type, mode: h.mode, time: h.time, status: h.status }) + h.text }));
     store.blocks.forEach((b) => items.push({ folder: "历史生成记录", name: "拦截记录_" + b.id + ".txt", content: "违规原因：" + b.reason + "\n违规内容：" + b.original + "\n替换内容：" + b.replaced + "\n时间：" + b.time }));
-    items.push({ folder: "时间发布排期", name: "每日发布排期表.txt", content: scheduleText() });
+    items.push({ folder: "发布时间排期", name: "每日发布排期表.txt", content: scheduleText() });
     items.push({ folder: "合规检测", name: "合规词库与规则.txt", content: wordsText() });
     return items;
   }
@@ -7027,6 +7749,78 @@ window.SEED = {
     if (ui.page === "update") render();
   }
 
+  /* ---------- 云端同步（Supabase）：账号 + 数据 ---------- */
+  function cloudCfgInputs() {
+    const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+    return { url: get("clUrl"), key: get("clKey"), account: get("clAccount"), pwd: get("clPwd") };
+  }
+
+  function saveCloudCfg() {
+    const v = cloudCfgInputs();
+    if (!store.settings) store.settings = {};
+    if (!store.settings.cloud) store.settings.cloud = { url: "", key: "", account: "", auto: true };
+    if (!v.url || !v.key) { toast("请先填写 Supabase 地址和 anon key"); return; }
+    store.settings.cloud.url = v.url;
+    store.settings.cloud.key = v.key;
+    if (v.account) store.settings.cloud.account = v.account;
+    save();
+    toast("云端配置已保存");
+    Cloud.init();
+    render();
+  }
+
+  async function cloudAuth(mode) {
+    const v = cloudCfgInputs();
+    if (!window.Cloud) { toast("云同步模块未加载"); return; }
+    if (!Cloud.configured() && (!v.url || !v.key)) { toast("请先填写 Supabase 地址和 anon key，并点「保存配置」"); return; }
+    if (v.url && v.key) {
+      store.settings.cloud.url = v.url;
+      store.settings.cloud.key = v.key;
+    }
+    if (!v.account) { toast("请填写手机号或邮箱"); return; }
+    if (!v.pwd) { toast("请填写密码"); return; }
+    store.settings.cloud.account = v.account;
+    save();
+    toast(mode === "up" ? "正在注册…" : "正在登录…");
+    const r = await (mode === "up" ? Cloud.signUp(v.account, v.pwd) : Cloud.signIn(v.account, v.pwd));
+    if (!r || !r.ok) { toast(r.error || "操作失败"); render(); return; }
+    const rr = await Cloud.reconcile(false);
+    render(true);
+    toast(rr && rr.direction === "down" ? "已登录，内容已从云端恢复" : "已登录，本地内容已上传");
+  }
+
+  async function cloudSignOut() {
+    if (!window.Cloud) return;
+    await Cloud.signOut();
+    toast("已退出云账号（本地内容保留）");
+    render();
+  }
+
+  async function cloudPushNow() {
+    if (!window.Cloud || !Cloud.hasSession()) { toast("请先登录云账号"); return; }
+    const r = await Cloud.push(false);
+    render();
+    if (r && r.size) toast("已上传（" + Math.round(r.size / 1024) + " KB）");
+  }
+
+  async function cloudPullNow() {
+    if (!window.Cloud || !Cloud.hasSession()) { toast("请先登录云账号"); return; }
+    const r = await Cloud.pull(true);
+    if (!r.ok) { toast(r.error || "拉取失败"); return; }
+    if (r.empty) { toast("云端还没有数据，可先点上传"); return; }
+    render(true);
+    toast("已从云端覆盖本地内容");
+  }
+
+  function toggleCloudAuto(v) {
+    if (!store.settings) store.settings = {};
+    if (!store.settings.cloud) store.settings.cloud = { url: "", key: "", account: "", auto: true };
+    store.settings.cloud.auto = !!v;
+    save();
+    toast(v ? "已开启自动同步" : "已关闭自动同步");
+    render();
+  }
+
   /* ---------- 启动 ---------- */
   function clock() {
     const d = Core.now();
@@ -7083,6 +7877,15 @@ window.SEED = {
     if (ui.sync.pending.length && ui.sync.auto) setTimeout(flushSync, 800);
     // 每次打开自动对齐服务端规则库（服务端每天 0 点联网更新，这里按需拉取）
     loadLiveRules(false);
+    // 云同步：已登录云账号时启动即对齐，之后每 3 分钟拉一次
+    if (window.Cloud) {
+      Cloud.init();
+      setInterval(() => {
+        if (Cloud.hasSession() && (store.settings.cloud || {}).auto !== false) {
+          Cloud.reconcile(true).then(() => { if (ui.page === "sync" || ui.page === "schedule") render(); });
+        }
+      }, 3 * 60 * 1000);
+    }
 
     // 必须先登录：未登录显示登录遮罩；登录后校验会员是否到期
     if (window.Auth) {
