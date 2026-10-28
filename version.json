@@ -1,13 +1,13 @@
 {
-  "versionCode": 20,
-  "versionName": "1.11.0",
-  "url": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.11.0.apk",
-  "size": 2590476,
-  "md5": "3847cae0eedf56b20fc1aed5f9e169f1",
+  "versionCode": 21,
+  "versionName": "1.11.1",
+  "url": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.11.1.apk",
+  "size": 2590964,
+  "md5": "7cf3f7a16c638b3883e7ac053b9804c3",
   "notes": [
-    "新增：合规规则库新增《微信公众平台运营规范》，覆盖标题党、诱导关注、抄袭侵权、低俗等违规类型",
-    "新增：每日 0 点自动联网抓取公众号运营规范，抽取违规案例中的新风险词",
-    "新增：内容检测命中标题党/诱导关注/抄袭侵权/低俗时展示对应公众号运营规范条款依据",
-    "优化：风险词分类逻辑扩展，新增词自动归类到标题党、诱导关注、抄袭侵权、低俗"
+    "修复：检查更新时某个 CDN 缓存滞后会返回旧版本清单，导致明明有新版本却提示「已是最新」",
+    "修复：更新源改为多源并发比对，取所有源中版本号最高的一份，单一源失效或滞后不再影响更新",
+    "修复：版本清单请求附加防缓存时间戳，绕过 jsDelivr 对 @main 分支的长缓存",
+    "优化：新增 GitHub Pages 作为首选更新源（缓存仅 10 分钟），raw 与 jsDelivr 作为备用源"
   ]
 }

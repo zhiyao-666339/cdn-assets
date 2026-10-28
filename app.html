@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#F4F5F7" />
 <!-- 版本清单地址：打包时写入，App 里「检查更新」按这些地址联网比对版本（逗号分隔，按顺序尝试） -->
-<meta name="pyq-update" content="https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json,https://ntfy.sh/pyq-upd-kx7f2a/json?poll=1&amp;since=all" />
+<meta name="pyq-update" content="https://zhiyao-666339.github.io/cdn-assets/version.json,https://raw.githubusercontent.com/zhiyao-666339/cdn-assets/main/version.json,https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json,https://ntfy.sh/pyq-upd-kx7f2a/json?poll=1&amp;since=all" />
 <title>朋友圈 AI 助手</title>
 <script>window.__BUILTIN_RULES__ = {
  "ok": true,
@@ -8195,15 +8195,22 @@ window.SEED = {
     return pick(t);
   }
 
+  // 附加时间戳参数，绕过 CDN / 中间代理的陈旧缓存（jsDelivr 对 @main 缓存可达数小时）
+  function withCacheBust(u) {
+    const sep = u.indexOf("?") >= 0 ? "&" : "?";
+    return u + sep + "_t=" + Date.now();
+  }
+
   async function fetchManifest(url) {
+    const target = withCacheBust(url);
     if (window.NativeApp && NativeApp.available() && NativeApp.checkUpdate) {
-      const r = await NativeApp.checkUpdate(url);
+      const r = await NativeApp.checkUpdate(target);
       if (!r || !r.ok) throw new Error((r && r.error) || "检查更新失败");
       const m = parseManifestText(r.body);
       if (!m) throw new Error("版本清单格式不正确");
       return m;
     }
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(target, { cache: "no-store" });
     if (!res.ok) throw new Error("更新服务返回 HTTP " + res.status);
     const m = parseManifestText(await res.text());
     if (!m) throw new Error("版本清单格式不正确");
@@ -8236,16 +8243,19 @@ window.SEED = {
       if (ui.page === "update") render();
       return;
     }
-    let m = null;
+    // 逐个拉取所有更新源，取 versionCode 最大的一份。
+    // 不能「首个成功即停」：任一 CDN 缓存滞后都会返回旧清单，从而漏掉新版本。
+    let best = null;
     const errs = [];
     for (const u of urls) {
       try {
-        m = await fetchManifest(u);
-        break;
+        const got = await fetchManifest(u);
+        if (!best || Number(got.versionCode) > Number(best.versionCode)) best = got;
       } catch (e) {
         errs.push((e && e.message) || "请求失败");
       }
     }
+    const m = best;
     if (m) {
       const cur = currentVersion();
       s.latest = m;
