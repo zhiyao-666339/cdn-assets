@@ -2099,8 +2099,16 @@ window.SEED = {
     videos: []
   },
 
-  // 生成设置：图片接口（OpenAI 兼容）、永久更新源、云端同步（Supabase）
+  // 生成设置：AI 模型（文案/图片/视频）、永久更新源、云端同步（Supabase）
   settings: {
+    // AI 模型：统一走 OpenAI 兼容协议，Key 只存本机，不上传任何服务器
+    ai: {
+      text: { base: "", key: "", model: "" },
+      // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
+      image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
+      video: { base: "", key: "", model: "cogvideox-flash" }
+    },
+    // 兼容旧版图片接口配置，迁移后不再使用
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
     updateUrl: "",
     cloud: {
@@ -2521,9 +2529,33 @@ window.SEED = {
               m.category = mapped;
             });
           }
-          // 生成设置默认值（图片接口 / 永久更新源 / 云同步）
+          // 生成设置默认值（AI 模型 / 图片接口 / 永久更新源 / 云同步）
           if (!s.settings) s.settings = {};
+          if (!s.settings.ai || typeof s.settings.ai !== "object") s.settings.ai = {};
+          const ai = s.settings.ai;
+          if (!ai.text || typeof ai.text !== "object") ai.text = { base: "", key: "", model: "" };
+          if (!ai.image || typeof ai.image !== "object") ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
+          if (!ai.video || typeof ai.video !== "object") ai.video = { base: "", key: "", model: "cogvideox-flash" };
+          if (!ai.image.mode) ai.image.mode = "free";
+          if (typeof ai.text.key !== "string") ai.text.key = "";
+          if (typeof ai.text.base !== "string") ai.text.base = "";
+          if (typeof ai.text.model !== "string") ai.text.model = "";
+          if (typeof ai.image.base !== "string") ai.image.base = "";
+          if (typeof ai.image.key !== "string") ai.image.key = "";
+          if (typeof ai.image.model !== "string") ai.image.model = "";
+          if (typeof ai.image.size !== "string" || !ai.image.size) ai.image.size = "1024x1024";
+          if (typeof ai.video.base !== "string") ai.video.base = "";
+          if (typeof ai.video.key !== "string") ai.video.key = "";
+          if (typeof ai.video.model !== "string") ai.video.model = "";
+          // 旧版图片接口配置迁移到 ai.image，用户已填过的设置不丢失
           if (!s.settings.imageApi) s.settings.imageApi = { base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
+          if (s.settings.imageApi.base && !ai.image.base) {
+            ai.image.mode = "custom";
+            ai.image.base = s.settings.imageApi.base;
+            ai.image.key = s.settings.imageApi.key || "";
+            ai.image.model = s.settings.imageApi.model || "gpt-image-1";
+            ai.image.size = s.settings.imageApi.size || "1024x1024";
+          }
           if (typeof s.settings.updateUrl !== "string") s.settings.updateUrl = "";
           if (!s.settings.cloud || typeof s.settings.cloud !== "object") {
             s.settings.cloud = { url: "", key: "", account: "", auto: true };
@@ -4582,6 +4614,78 @@ window.SEED = {
     );
   }
 
+  /* ---------- AI 模型接入 ---------- */
+  function aiField(id, label, value, placeholder, type) {
+    return '<div class="field"><label>' + label + '</label><input class="input" id="' + id +
+      '" type="' + (type || "text") + '" placeholder="' + placeholder + '" value="' + Core.escapeHtml(value || "") + '" /></div>';
+  }
+
+  function aiPresetChips(kind) {
+    const list = (window.App && App.aiPresets ? App.aiPresets()[kind] : []) || [];
+    return '<div class="chips" style="margin:-4px 0 10px">' + list.map((p) =>
+      '<button class="chip small" onclick="App.aiPreset(\'' + kind + '\',\'' + p.id + '\')">' + p.name + "</button>"
+    ).join("") + "</div>";
+  }
+
+  function aiSecHead(ic, title, state) {
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<span style="color:#7A5AF8">' + icon(ic, 16) + "</span>" +
+      '<b style="font-size:14px">' + title + "</b>" +
+      '<em style="margin-left:auto;font-style:normal;font-size:11px;color:#8A8F99">' + state + "</em>" +
+      "</div>";
+  }
+
+  function renderAI() {
+    const ai = (store.settings && store.settings.ai) || {};
+    const t = ai.text || {}, im = ai.image || {}, vd = ai.video || {};
+    return (
+      '<div class="page">' +
+        UI.head("AI 模型接入", "文案 / 图片 / 视频 · 支持免费模型", "", true) +
+        '<div class="hint" style="margin-bottom:12px">' + icon("shield", 13) +
+          "<span>全部走 OpenAI 兼容协议，Key 只保存在本机。带「免费」的预设注册后即可领取免费额度；图片免费通道连 Key 都不用填。</span></div>" +
+
+        '<div class="card">' +
+          aiSecHead("spark", "文案生成", t.base && t.key ? "已接入" : "未配置") +
+          '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；未配置时自动使用本地模板。</div>' +
+          aiPresetChips("text") +
+          aiField("aiTextBase", "接口地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiTextKey", "API Key", t.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiTextModel", "模型", t.model || "glm-4-flash", "glm-4-flash") +
+          '<button class="btn soft block" onclick="App.aiTest(\'text\')">测试文案模型</button>' +
+        "</div>" +
+
+        '<div class="card mt12">' +
+          aiSecHead("image", "图片生成", im.mode === "free" ? "免费通道" : (im.base && im.key ? "自定义接口" : "未配置")) +
+          '<div class="muted" style="margin:0 0 8px">免费通道由 Pollinations 提供，无需 Key；也可填自己的 OpenAI 兼容图片接口。</div>' +
+          aiPresetChips("image") +
+          '<div class="field"><label>通道</label><select class="input" id="aiImageMode">' +
+            '<option value="free"' + (im.mode === "free" ? " selected" : "") + ">免费通道（无需 Key）</option>" +
+            '<option value="custom"' + (im.mode === "custom" ? " selected" : "") + ">自定义接口</option>" +
+          "</select></div>" +
+          aiField("aiImageBase", "接口地址（自定义时填写）", im.base, "https://api.openai.com/v1") +
+          aiField("aiImageKey", "API Key（自定义时填写）", im.key, "sk-...", "password") +
+          aiField("aiImageModel", "模型", im.model, "gpt-image-1 / cogview-3-flash") +
+          aiField("aiImageSize", "尺寸", im.size, "1024x1024") +
+          '<button class="btn soft block" onclick="App.aiTest(\'image\')">测试图片接口</button>' +
+        "</div>" +
+
+        '<div class="card mt12">' +
+          aiSecHead("video", "视频生成", vd.base && vd.key ? "已接入" : "未配置") +
+          '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用。</div>' +
+          aiPresetChips("video") +
+          aiField("aiVideoBase", "接口地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiVideoKey", "API Key", vd.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiVideoModel", "模型", vd.model || "cogvideox-flash", "cogvideox-flash") +
+          '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
+        "</div>" +
+
+        '<button class="btn primary block mt12" onclick="App.aiSaveSettings()">保存 AI 模型设置</button>' +
+        '<div class="hint" style="margin-top:12px">' + icon("spark", 13) +
+          "<span>省事方案：文案和视频都用智谱（同一个 Key，注册一次即可），图片直接用免费通道，零配置。</span></div>" +
+      "</div>"
+    );
+  }
+
   /* ---------- 我的 ---------- */
   function memberStatus(m) {
     if (!m) return "未开通";
@@ -4589,6 +4693,13 @@ window.SEED = {
     if (m.tier >= 1 && m.expiresAt > Date.now()) return m.tierName + " · 剩余 " + m.daysLeft + " 天";
     if (m.trialEndsAt > Date.now()) return "免费试用 · 剩余 " + m.daysLeft + " 天";
     return "免费试用已到期";
+  }
+
+  function aiMenuNote() {
+    const ai = (store.settings && store.settings.ai) || {};
+    const t = ai.text || {}, im = ai.image || {}, vd = ai.video || {};
+    const imgState = im.mode === "free" ? "图片免费通道" : (im.base && im.key ? "图片自定义" : "图片未配置");
+    return (t.base && t.key ? "文案已接入" : "文案未配置") + " · " + imgState + (vd.base && vd.key ? " · 视频已接入" : "");
   }
 
   function renderMore() {
@@ -4601,6 +4712,7 @@ window.SEED = {
       ["history", "clock", "#EEF3FF", "#5B8FF9", "历史生成记录", store.history.length + " 条"],
       ["logs", "shield", "#FFF8E6", "#D48806", "系统日志", (store.auditLog || []).length + " 条留痕"],
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
+      ["ai", "spark", "#F2F0FF", "#7A5AF8", "AI 模型接入", aiMenuNote()],
       ["schedule", "calendar", "#FFF5E9", "#FF9F43", "发布时间排期", store.slots.length + " 个时段"],
       ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与归档", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
       ["update", "refresh", "#F0F1F5", "#4E5969", "检查更新", updateMenuNote()],
@@ -4945,7 +5057,7 @@ window.SEED = {
     );
   }
 
-  window.ViewsMore = { renderSchedule, renderProfile, renderHistory, renderCompliance, renderSync, renderMore, renderAccount, renderMember, renderContact, renderUpdate, renderLogs };
+  window.ViewsMore = { renderSchedule, renderProfile, renderHistory, renderCompliance, renderSync, renderMore, renderAccount, renderMember, renderContact, renderUpdate, renderLogs, renderAI };
 })();
 
 </script>
@@ -5331,6 +5443,8 @@ window.SEED = {
         else if (method === "checkUpdate") B.checkUpdate(args[0], cid);
         else if (method === "installUpdate") B.installUpdate(args[0], cid);
         else if (method === "genImage") B.genImage(args[0], args[1], args[2], args[3], args[4], cid);
+        else if (method === "aiChat") B.aiChat(args[0], args[1], args[2], args[3], cid);
+        else if (method === "genVideo") B.genVideo(args[0], args[1], args[2], args[3], cid);
         else if (method === "saveMediaUrl") B.saveMediaUrl(args[0], args[1], !!args[2], cid);
         else resolve({ ok: false, error: "未知原生方法：" + method });
       } catch (e) {
@@ -5426,6 +5540,10 @@ window.SEED = {
     installUpdate: (apkUrl) => call("installUpdate", [apkUrl]),
     // AI 生成图片：走用户自己配置的接口，生成后直接存入相册
     genImage: (base, key, model, prompt, size) => call("genImage", [base, key, model, prompt, size]),
+    // AI 文案：OpenAI 兼容 chat/completions
+    aiChat: (base, key, model, messagesJson) => call("aiChat", [base, key, model, messagesJson]),
+    // AI 视频：智谱 CogVideoX 异步任务（创建 + 轮询）
+    genVideo: (base, key, model, prompt) => call("genVideo", [base, key, model, prompt]),
     // 把网络图片/视频保存到手机相册
     saveMediaUrl: (url, name, isVideo) => call("saveMediaUrl", [url, name, !!isVideo]),
     builtinRules,
@@ -6343,7 +6461,7 @@ window.SEED = {
   const icon = UI.icon;
   const SYNC_KEY = "pyq_sync_v1";
   const TABS = { home: "home", create: "create", topics: "topics", materials: "materials", more: "more" };
-  const TAB_OF = { schedule: "more", profile: "more", history: "more", compliance: "more", sync: "more", account: "more", member: "more", contact: "more", update: "more", logs: "more" };
+  const TAB_OF = { schedule: "more", profile: "more", history: "more", compliance: "more", sync: "more", account: "more", member: "more", contact: "more", update: "more", logs: "more", ai: "more" };
   let stack = [];
 
   const RENDERERS = {
@@ -6362,6 +6480,7 @@ window.SEED = {
     contact: ViewsMore.renderContact,
     update: ViewsMore.renderUpdate,
     logs: ViewsMore.renderLogs,
+    ai: ViewsMore.renderAI,
     more: ViewsMore.renderMore
   };
 
@@ -6473,44 +6592,69 @@ window.SEED = {
     render();
   }
 
-  function generate() {
+  // 统一收尾：写结果 + 合规检测 + 记入历史 / 拦截记录
+  function finishCompose(c, text, setDraft) {
+    c.variant += 1;
+    c.result = text;
+    if (setDraft !== false) c.text = text;
+    c.check = Core.checkText(text);
+    c.fixedText = c.check.passed ? "" : Core.replaceText(text, c.check.violations);
+    c.loading = false;
+    if (!c.check.passed) recordBlock(c); else recordPass(c);
+    render();
+    const view = document.getElementById("view");
+    const res = view.querySelector(".result");
+    if (res) view.scrollTop = view.scrollHeight;
+  }
+
+  async function generate() {
     const c = ensureCompose();
     c.loading = true;
     c.replaced = false;
     render();
+    const cfg = aiCfg().text;
+    if (cfg.base && cfg.key) {
+      toast("AI 正在生成文案…");
+      const r = await aiChat([
+        { role: "system", content: "你是一位真实的中文朋友圈写作者，擅长写有人味、不营销的日常文案。" },
+        { role: "user", content: aiTextPrompt(c) }
+      ]);
+      if (r && r.ok && r.text) {
+        finishCompose(c, cleanAIText(r.text));
+        return;
+      }
+      toast("AI 接口失败，已改用本地模板：" + ((r && r.error) || ""));
+    }
     setTimeout(() => {
-      c.variant += 1;
-      let text = Core.generate(c.typeId, c.topic, c.variant, c.styles, c.materialIds, c.size);
-      c.result = text;
-      c.text = text;
-      c.check = Core.checkText(text);
-      c.fixedText = c.check.passed ? "" : Core.replaceText(text, c.check.violations);
-      c.loading = false;
-      if (!c.check.passed) recordBlock(c); else recordPass(c);
-      render();
-      const view = document.getElementById("view");
-      const res = view.querySelector(".result");
-      if (res) view.scrollTop = view.scrollHeight;
+      finishCompose(c, Core.generate(c.typeId, c.topic, c.variant + 1, c.styles, c.materialIds, c.size));
     }, 720);
   }
 
-  function polish() {
+  async function polish() {
     const c = ensureCompose();
     if (!c.text.trim()) { toast("先写下你的原文"); return; }
     c.loading = true;
     render();
+    const cfg = aiCfg().text;
+    if (cfg.base && cfg.key) {
+      toast("AI 正在润色…");
+      const r = await aiChat([
+        { role: "system", content: "你是中文朋友圈润色助手，只调整语气、结构和营销感，不改原意。" },
+        { role: "user", content: "请润色下面这条朋友圈，保持原意，去掉 AI 腔和营销感，篇幅：" +
+          (c.size === "long" ? "长文 300 字以上" : "短文 " + Core.SHORT_MAX + " 字以内") +
+          (c.styles.length ? "；文风：" + c.styles.map((s) => STYLE_HINT[s] || s).join("；") : "") +
+          "\n\n原文：\n" + c.text + "\n\n直接输出润色后的正文。" }
+      ]);
+      if (r && r.ok && r.text) {
+        finishCompose(c, cleanAIText(r.text), false);
+        return;
+      }
+      toast("AI 润色失败，已用本地规则处理：" + ((r && r.error) || ""));
+    }
     setTimeout(() => {
-      c.variant += 1;
       let text = Core.polish(c.text, c.size);
       text = Core.applyStyles(text, c.styles);
-      c.result = text;
-      c.check = Core.checkText(text);
-      c.fixedText = c.check.passed ? "" : Core.replaceText(text, c.check.violations);
-      c.loading = false;
-      if (!c.check.passed) recordBlock(c); else recordPass(c);
-      render();
-      const view = document.getElementById("view");
-      view.scrollTop = view.scrollHeight;
+      finishCompose(c, text, false);
     }, 620);
   }
 
@@ -7114,14 +7258,195 @@ window.SEED = {
     });
   }
 
-  /* ---------- AI 图片 / 视频生成记录 ---------- */
+  /* ---------- AI 模型：文案 / 图片 / 视频（统一 OpenAI 兼容配置） ---------- */
 
-  // 图片接口设置（OpenAI 兼容），Key 只存本机
-  function imageApiCfg() {
+  // 免费 / 常用预设：一键填入接口地址与模型
+  const AI_PRESETS = {
+    text: [
+      { id: "zhipu", name: "智谱 GLM（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
+      { id: "siliconflow", name: "硅基流动（送额度）", base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" },
+      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+    ],
+    image: [
+      { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
+      { id: "zhipu", name: "智谱 CogView（免费）", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
+      { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
+    ],
+    video: [
+      { id: "zhipu", name: "智谱 CogVideoX（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogvideox-flash" },
+      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+    ]
+  };
+
+  function aiCfg() {
     if (!store.settings) store.settings = {};
-    if (!store.settings.imageApi) store.settings.imageApi = { base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
-    return store.settings.imageApi;
+    if (!store.settings.ai) store.settings.ai = {};
+    const ai = store.settings.ai;
+    if (!ai.text) ai.text = { base: "", key: "", model: "" };
+    if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
+    if (!ai.video) ai.video = { base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.image.mode) ai.image.mode = "free";
+    return ai;
   }
+
+  // 图片配置（兼容旧字段）
+  function imageCfg() {
+    return aiCfg().image;
+  }
+
+  const STYLE_HINT = {
+    deai: "去掉 AI 腔，像普通人说话",
+    like: "更接近作者本人的口吻",
+    real: "有真人感和生活细节",
+    softsell: "营销感弱一点，不要推销",
+    emotion: "带一点情绪和故事感",
+    casual: "口语化，专业感弱一点"
+  };
+
+  // 调用 OpenAI 兼容的 chat/completions：App 内走原生 HTTP，网页版回退 fetch
+  async function aiChat(messages) {
+    const c = aiCfg().text;
+    if (!c.base) return { ok: false, error: "未配置文案模型" };
+    const model = c.model || "glm-4-flash";
+    if (window.NativeApp && NativeApp.available() && NativeApp.aiChat) {
+      return NativeApp.aiChat(c.base, c.key, model, JSON.stringify(messages));
+    }
+    if (!c.key) return { ok: false, error: "未配置 API Key" };
+    try {
+      const url = c.base.replace(/\/+$/, "") + "/chat/completions";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + c.key },
+        body: JSON.stringify({ model: model, messages: messages, temperature: 0.8, stream: false })
+      });
+      const txt = await res.text();
+      if (!res.ok) return { ok: false, error: "接口返回 HTTP " + res.status + "：" + txt.slice(0, 160) };
+      let data = {};
+      try { data = JSON.parse(txt); } catch (e) { return { ok: false, error: "接口返回格式错误" }; }
+      const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+      const text = (msg && msg.content) || "";
+      if (!text.trim()) return { ok: false, error: "接口没有返回内容" };
+      return { ok: true, text: text.trim() };
+    } catch (e) {
+      return { ok: false, error: "请求失败（网页版可能受跨域限制）：" + ((e && e.message) || e) };
+    }
+  }
+
+  // 组装文案生成提示词：类型结构 + 作者人设 + 文风 + 真实素材
+  function aiTextPrompt(c) {
+    const t = Core.typeById(c.typeId) || {};
+    const p = Core.persona ? Core.persona() : {};
+    const lines = [
+      "你是中文朋友圈写作助手。请写一条可以直接发到朋友圈的文案。",
+      "必须做到：真实、口语化、有具体细节；不要 AI 腔、不要排比堆砌、不要书面总结；不要营销话术和夸张承诺；emoji 最多 1 个。",
+      "文案类型：" + (t.name || ""),
+      "结构：" + (t.structure || ""),
+      "写作要求：" + (t.instruction || ""),
+      "本次选题 / 素材：" + (c.topic || t.defaultTopic || ""),
+      "篇幅：" + (c.size === "long"
+        ? "长文，4-8 段，300 字以上，段落之间空一行"
+        : "短文，" + Core.SHORT_MAX + " 字以内，最多 3 行，适合朋友圈不折叠")
+    ];
+    if (c.styles && c.styles.length) {
+      lines.push("文风：" + c.styles.map((s) => STYLE_HINT[s] || s).join("；"));
+    }
+    const mats = (c.materialIds || []).slice(0, 2)
+      .map((id) => (store.materials.copy.find((m) => m.id === id) || {}).text)
+      .filter(Boolean);
+    if (mats.length) lines.push("可参考的真实素材：" + mats.join(" / "));
+    if (p.identity) lines.push("作者身份：" + p.identity);
+    if (p.style) lines.push("作者平时的表达风格：" + String(p.style).slice(0, 200));
+    if (p.avoid) lines.push("作者不喜欢的表达：" + String(p.avoid).slice(0, 200));
+    lines.push("直接输出文案正文，不要标题、不要引号、不要解释。");
+    return lines.join("\n");
+  }
+
+  // 清理模型输出：去掉代码块、前缀标签和成对引号
+  function cleanAIText(s) {
+    let t = String(s || "").trim();
+    t = t.replace(/^```[^\n]*\n/, "").replace(/\n?```$/, "").trim();
+    t = t.replace(/^(文案|朋友圈文案|正文)[:：]\s*/, "");
+    t = t.replace(/^["“]([\s\S]*)["”]$/, "$1");
+    return t.trim();
+  }
+
+  /* ---------- AI 模型接入设置页（我的 → AI 模型接入） ---------- */
+
+  // 预设只填表单，保存后生效
+  function aiPreset(kind, id) {
+    const p = (AI_PRESETS[kind] || []).find((x) => x.id === id);
+    if (!p) return;
+    if (kind === "image") {
+      const mode = document.getElementById("aiImageMode");
+      if (mode) mode.value = p.mode;
+      const base = document.getElementById("aiImageBase");
+      if (base) base.value = p.base;
+      const model = document.getElementById("aiImageModel");
+      if (model) model.value = p.model;
+    } else {
+      const prefix = kind === "text" ? "aiText" : "aiVideo";
+      const base = document.getElementById(prefix + "Base");
+      if (base) base.value = p.base;
+      const model = document.getElementById(prefix + "Model");
+      if (model) model.value = p.model;
+    }
+    toast("已填入「" + p.name + "」，保存后生效");
+  }
+
+  function aiSaveSettings() {
+    const ai = aiCfg();
+    ai.text.base = document.getElementById("aiTextBase").value.trim();
+    ai.text.key = document.getElementById("aiTextKey").value.trim();
+    ai.text.model = document.getElementById("aiTextModel").value.trim();
+    ai.image.mode = document.getElementById("aiImageMode").value;
+    ai.image.base = document.getElementById("aiImageBase").value.trim();
+    ai.image.key = document.getElementById("aiImageKey").value.trim();
+    ai.image.model = document.getElementById("aiImageModel").value.trim();
+    ai.image.size = document.getElementById("aiImageSize").value;
+    ai.video.base = document.getElementById("aiVideoBase").value.trim();
+    ai.video.key = document.getElementById("aiVideoKey").value.trim();
+    ai.video.model = document.getElementById("aiVideoModel").value.trim();
+    save();
+    render();
+    toast("AI 模型设置已保存");
+  }
+
+  async function aiTest(kind) {
+    const ai = aiCfg();
+    if (kind === "text") {
+      ai.text.base = document.getElementById("aiTextBase").value.trim();
+      ai.text.key = document.getElementById("aiTextKey").value.trim();
+      ai.text.model = document.getElementById("aiTextModel").value.trim();
+      save();
+      if (!ai.text.base || !ai.text.key) { toast("先填接口地址和 API Key"); return; }
+      toast("正在测试文案模型…");
+      const r = await aiChat([{ role: "user", content: "只回复两个字：你好" }]);
+      toast(r && r.ok ? "文案模型连接成功：" + String(r.text || "").slice(0, 20) : "文案模型失败：" + ((r && r.error) || ""));
+      return;
+    }
+    if (kind === "image") {
+      ai.image.mode = document.getElementById("aiImageMode").value;
+      ai.image.base = document.getElementById("aiImageBase").value.trim();
+      ai.image.key = document.getElementById("aiImageKey").value.trim();
+      ai.image.model = document.getElementById("aiImageModel").value.trim();
+      save();
+      if (ai.image.mode === "free") { toast("免费通道无需配置，直接到「素材 → 生成图片」使用"); return; }
+      if (!ai.image.base || !ai.image.key) { toast("先填接口地址和 API Key"); return; }
+      if (!(window.NativeApp && NativeApp.available() && NativeApp.genImage)) { toast("自定义图片接口需在 App 内测试"); return; }
+      toast("正在测试图片接口…");
+      const r = await NativeApp.genImage(ai.image.base, ai.image.key, ai.image.model, "一只橘猫趴在窗台上晒太阳", ai.image.size);
+      toast(r && r.ok ? "图片接口连接成功，图片已存相册" : "图片接口失败：" + ((r && r.error) || ""));
+      return;
+    }
+    ai.video.base = document.getElementById("aiVideoBase").value.trim();
+    ai.video.key = document.getElementById("aiVideoKey").value.trim();
+    ai.video.model = document.getElementById("aiVideoModel").value.trim();
+    save();
+    if (!ai.video.base || !ai.video.key) { toast("先填接口地址和 API Key"); return; }
+    toast("视频生成较慢，请到「素材 → 新增视频」里直接生成");
+  }
+
+  /* ---------- AI 图片 / 视频生成记录 ---------- */
 
   // 把图片/视频记录写入生成记录；被拦截时同时写入拦截记录
   function recordMedia(o) {
@@ -7160,35 +7485,91 @@ window.SEED = {
   }
 
   function openImageSheet() {
-    const cfg = imageApiCfg();
+    const cfg = imageCfg();
+    const presets = AI_PRESETS.image.map((p) =>
+      '<button class="chip small' + (p.id === "free" && cfg.mode === "free" ? " active" : "") +
+      '" onclick="App.aiImagePreset(\'' + p.id + '\')">' + p.name + "</button>"
+    ).join("");
     openSheet(
       "<h3>AI 生成图片</h3>" +
       '<div class="field"><label>画面描述</label><textarea class="textarea" id="imgPrompt" rows="3" placeholder="例如：我的书桌，暖色台灯，真实生活感"></textarea></div>' +
-      '<details class="api-box"' + (cfg.base ? "" : " open") + "><summary>图片接口设置（OpenAI 兼容，填一次即可）</summary>" +
+      '<div class="field"><label>通道</label>' +
+        '<select class="input" id="imgMode">' +
+          '<option value="free"' + (cfg.mode === "free" ? " selected" : "") + ">免费通道（无需 Key）</option>" +
+          '<option value="custom"' + (cfg.mode === "custom" ? " selected" : "") + ">自定义接口（OpenAI 兼容）</option>" +
+        "</select>" +
+      "</div>" +
+      '<div class="chips" style="margin:-4px 0 10px">' + presets + "</div>" +
+      '<details class="api-box"' + (cfg.mode === "custom" ? " open" : "") + "><summary>自定义接口设置（填一次即可）</summary>" +
         '<div class="field"><label>接口地址</label><input class="input" id="imgApiBase" placeholder="https://api.openai.com/v1" value="' + escapeHtml(cfg.base) + '" /></div>' +
         '<div class="field"><label>API Key</label><input class="input" id="imgApiKey" type="password" placeholder="sk-..." value="' + escapeHtml(cfg.key) + '" /></div>' +
-        '<div class="field"><label>模型</label><input class="input" id="imgApiModel" placeholder="gpt-image-1 / dall-e-3" value="' + escapeHtml(cfg.model) + '" /></div>' +
+        '<div class="field"><label>模型</label><input class="input" id="imgApiModel" placeholder="gpt-image-1 / cogview-3-flash" value="' + escapeHtml(cfg.model) + '" /></div>' +
         '<div class="field"><label>尺寸</label><input class="input" id="imgApiSize" placeholder="1024x1024" value="' + escapeHtml(cfg.size) + '" /></div>' +
         '<div class="muted" style="font-size:11px">Key 只保存在本机，不会上传到任何服务器；公用手机请勿填写。</div>' +
       "</details>" +
-      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>描述会先过合规检测，命中风险词会直接拦截并记入生成记录；生成成功的图片自动保存到手机相册。</span></div>" +
+      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>免费通道由 Pollinations 提供，无需注册和 Key；描述会先过合规检测，命中风险词直接拦截；生成成功的图片自动存入相册。</span></div>" +
       '<div class="sheet-actions"><button class="btn ghost" onclick="App.closeSheet()">取消</button>' +
       '<button class="btn primary" onclick="App.generateImage()">生成</button></div>'
     );
   }
 
+  // 图片预设：只改表单，不重建弹层，避免丢失已输入的描述
+  function aiImagePreset(id) {
+    const p = AI_PRESETS.image.find((x) => x.id === id);
+    if (!p) return;
+    const mode = document.getElementById("imgMode");
+    if (mode) mode.value = p.mode;
+    const base = document.getElementById("imgApiBase");
+    if (base && p.base) base.value = p.base;
+    const model = document.getElementById("imgApiModel");
+    if (model && p.model) model.value = p.model;
+    toast(p.mode === "free" ? "已切换到免费通道，无需填写 Key" : "已填入「" + p.name + "」，还需填写 API Key");
+  }
+
+  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
+  async function generateFreeImage(prompt, size) {
+    const dim = String(size || "1024x1024").split("x");
+    const w = parseInt(dim[0], 10) || 1024;
+    const h = parseInt(dim[1], 10) || 1024;
+    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
+      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
+    toast("正在生成图片，请稍候…");
+    let thumb = "";
+    let saved = false;
+    if (window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl) {
+      const r = await NativeApp.saveMediaUrl(url, "AI图片_" + Date.now(), false);
+      if (!r || !r.ok) { toast((r && r.error) || "图片下载失败，请重试"); return; }
+      saved = true;
+      thumb = r.thumb || "";
+    }
+    const m = {
+      id: uid("img"), kind: "image", source: "AI 生成 · 免费通道", prompt: prompt,
+      src: thumb || url, url: url, saved: saved, time: nowISO()
+    };
+    store.materials.images.unshift(m);
+    if (!save()) { m.src = m.url || ""; save(); }
+    recordMedia({
+      kind: "image", status: "已通过", title: prompt, source: "AI 生成 · 免费通道",
+      media: { src: m.src, url: m.url, prompt: prompt }
+    });
+    queueItem(
+      "素材库/图片库/AI 生成", m.id + "_图片说明.txt",
+      "提示词：" + prompt + "\n图片地址：" + url + "\n生成时间：" + m.time
+    );
+    render();
+    toast(saved ? "图片已生成并保存到手机相册" : "图片已生成，点图片可预览 / 保存");
+  }
+
   async function generateImage() {
     const prompt = document.getElementById("imgPrompt").value.trim();
     if (!prompt) { toast("先写画面描述"); return; }
-    const cfg = imageApiCfg();
+    const cfg = imageCfg();
+    cfg.mode = document.getElementById("imgMode").value;
     cfg.base = document.getElementById("imgApiBase").value.trim();
     cfg.key = document.getElementById("imgApiKey").value.trim();
     cfg.model = document.getElementById("imgApiModel").value.trim();
     cfg.size = document.getElementById("imgApiSize").value;
     save();
-
-    if (!(window.NativeApp && NativeApp.available() && NativeApp.genImage)) { toast("图片生成需在 App 内使用"); return; }
-    if (!cfg.base || !cfg.key) { toast("请先在「图片接口设置」里填写接口地址和 API Key"); return; }
 
     const check = Core.checkText(prompt);
     if (!check.passed) {
@@ -7204,6 +7585,16 @@ window.SEED = {
     }
 
     closeSheet();
+
+    // 免费通道：无需 Key，App 内下载入相册，网页版直接用图片地址
+    if (cfg.mode === "free") {
+      await generateFreeImage(prompt, cfg.size);
+      return;
+    }
+
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.genImage)) { toast("自定义图片接口需在 App 内使用"); return; }
+    if (!cfg.base || !cfg.key) { toast("请先填写接口地址和 API Key，或切换到免费通道"); return; }
+
     toast("正在生成图片，请稍候…");
     const r = await NativeApp.genImage(cfg.base, cfg.key, cfg.model, prompt, cfg.size);
     if (!r || !r.ok) {
@@ -7546,10 +7937,59 @@ window.SEED = {
       '<div class="field"><label>视频链接（可播放的 mp4 直链）</label><input class="input" id="videoUrl" placeholder="https://.../video.mp4" /></div>' +
       '<label class="btn ghost block file-label" style="margin-bottom:6px">选择手机里的视频<input class="file-cover" type="file" accept="video/*" onchange="App.pickVideoFile(this)" /></label>' +
       '<div class="muted" id="videoPick" style="margin-bottom:10px">未选择本地视频；选择后会自动保存到手机相册</div>' +
-      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>标题会先过合规检测，命中风险词会直接拦截并记入生成记录。</span></div>" +
+      '<div class="field"><label>AI 生成视频（免费 CogVideoX）</label>' +
+        '<textarea class="textarea" id="videoPrompt" rows="3" placeholder="例如：傍晚的城市街道，暖光，慢镜头，写实风格"></textarea></div>' +
+      '<button class="btn soft block" style="margin-bottom:10px" onclick="App.generateVideo()">' + icon("spark", 16) + "AI 生成视频（约 1-3 分钟）</button>" +
+      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>标题会先过合规检测，命中风险词会直接拦截并记入生成记录；AI 生成视频需在 App 内使用，需先在「AI 模型接入」配置智谱 Key。</span></div>" +
       '<div class="sheet-actions"><button class="btn ghost" onclick="App.closeSheet()">取消</button>' +
       '<button class="btn primary" onclick="App.saveVideo()">保存</button></div>'
     );
+  }
+
+  // AI 生成视频：智谱 CogVideoX 异步任务，原生侧创建 + 轮询
+  async function generateVideo() {
+    const prompt = (document.getElementById("videoPrompt") || {}).value.trim();
+    if (!prompt) { toast("先写画面描述"); return; }
+    const cfg = aiCfg().video;
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
+    if (!cfg.base || !cfg.key) { toast("请先在「AI 模型接入」里配置视频模型和 Key"); return; }
+
+    const check = Core.checkText(prompt);
+    if (!check.passed) {
+      const info = blockInfo(check);
+      recordMedia({
+        kind: "video", status: "已拦截", title: prompt, source: "AI 生成",
+        category: info.category, word: info.word,
+        reason: info.reason + "，视频描述未通过检测，已拦截未生成"
+      });
+      closeSheet(); render();
+      toast("画面描述含风险词，已拦截并记入生成记录");
+      return;
+    }
+
+    closeSheet();
+    toast("视频生成中，约需 1-3 分钟，完成后自动保存…");
+    const r = await NativeApp.genVideo(cfg.base, cfg.key, cfg.model, prompt);
+    if (!r || !r.ok) { toast((r && r.error) || "视频生成失败"); return; }
+    const url = r.url || "";
+    let saved = false;
+    if (url && NativeApp.saveMediaUrl) {
+      const s = await NativeApp.saveMediaUrl(url, "AI视频_" + Date.now(), true);
+      saved = !!(s && s.ok);
+    }
+    const v = {
+      id: uid("v"), kind: "video", title: prompt.slice(0, 40), source: "AI 生成",
+      url: url, time: nowISO(), size: 0, synced: false, local: false, error: ""
+    };
+    store.materials.videos.unshift(v);
+    save();
+    recordMedia({ kind: "video", status: "已通过", title: prompt, source: "AI 生成", media: { url: url, prompt: prompt } });
+    queueItem(
+      "素材库/视频库/AI 生成", v.id + "_视频说明.txt",
+      "提示词：" + prompt + "\n视频地址：" + url + "\n生成时间：" + v.time
+    );
+    render();
+    toast(saved ? "视频已生成并保存到手机相册" : "视频已生成，可在素材库预览");
   }
 
   function pickVideoFile(input) {
@@ -7874,7 +8314,8 @@ window.SEED = {
     setTopicScope, editTopic, updateTopic, delTopic, confirmDelTopic, copyTopic,
     openSlotSheet, saveSlot, delSlot, confirmDelSlot, genSlotContent, editSlotContent, saveSlotContent,
     setMaterialTab, setMaterialCat, materialToCompose, copyMaterial, copyMaterialText,
-    openMaterialAdd, saveMaterial, openImageSheet, generateImage,
+    openMaterialAdd, saveMaterial, openImageSheet, generateImage, aiImagePreset,
+    aiPreset, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
     saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,
