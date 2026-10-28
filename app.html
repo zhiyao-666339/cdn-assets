@@ -4585,7 +4585,7 @@ window.SEED = {
   /* ---------- 我的 ---------- */
   function memberStatus(m) {
     if (!m) return "未开通";
-    if (m.tier === 4) return "永久会员 · 无限期";
+    if (m.tier === 4 && m.daysLeft === -1) return "永久会员 · 无限期";
     if (m.tier >= 1 && m.expiresAt > Date.now()) return m.tierName + " · 剩余 " + m.daysLeft + " 天";
     if (m.trialEndsAt > Date.now()) return "免费试用 · 剩余 " + m.daysLeft + " 天";
     return "免费试用已到期";
@@ -4619,7 +4619,7 @@ window.SEED = {
           avatarHtml() +
           "<div><div class=\"profile-name\">" + Core.escapeHtml(store.user.name || (me ? (me.name || me.masked || me.phone) : "未登录")) + "</div>" +
           '<div class="profile-tag">' + Core.escapeHtml(store.user.tagline || (me ? me.masked : "请先注册登录")) + "</div></div>" +
-          '<span class="profile-badge">' + (me ? (mm && mm.tier === 4 ? "永久会员" : (mm && mm.tier >= 1 && mm.expiresAt > Date.now() ? mm.tierName : (mm && mm.trialEndsAt > Date.now() ? "试用中" : "已登录"))) : "点击登录") + '</span>' +
+          '<span class="profile-badge">' + (me ? (mm && mm.tier === 4 && mm.daysLeft === -1 ? "永久会员" : (mm && mm.tier >= 1 && mm.expiresAt > Date.now() ? mm.tierName : (mm && mm.trialEndsAt > Date.now() ? "试用中" : "已登录"))) : "点击登录") + '</span>' +
         "</div>" +
         '<div class="stat-row">' +
           '<div class="stat"><b>' + store.drafts.length + '</b><span>草稿</span></div>' +
@@ -4641,7 +4641,7 @@ window.SEED = {
     const m = (me && me.member) || null;
     const tiers = (window.Auth && Auth.tiers) || [];
     const active = m && Auth.memberActive(m);
-    const badge = !m ? "未开通" : m.tier === 4 ? "永久会员" : m.tier >= 1 && m.expiresAt > Date.now() ? m.tierName : m.trialEndsAt > Date.now() ? "免费试用" : "已到期";
+    const badge = !m ? "未开通" : m.tier === 4 && m.daysLeft === -1 ? "永久会员" : m.tier >= 1 && m.expiresAt > Date.now() ? m.tierName : m.trialEndsAt > Date.now() ? "免费试用" : "已到期";
 
     const cards = tiers.map((t) =>
       '<div class="m-tier" onclick="Auth.showPay(' + t.tier + ')">' +
@@ -4652,7 +4652,7 @@ window.SEED = {
     ).join("");
 
     const expireLine = m
-      ? (m.tier === 4
+      ? (m.tier === 4 && m.daysLeft === -1
           ? "已开通永久会员，无需续费"
           : m.tier >= 1 && m.expiresAt > Date.now()
             ? "到期时间：" + new Date(m.expiresAt).toLocaleDateString("zh-CN") + "（剩余 " + m.daysLeft + " 天）"
@@ -4771,6 +4771,14 @@ window.SEED = {
           : "") +
         '<button class="btn ghost block mt12" onclick="App.checkUpdate()">' + icon("refresh", 16) +
           (s.state === "checking" ? "检查中…" : "检查更新") + "</button>" +
+        '<div class="card mt12">' +
+          '<b style="font-size:13.5px">永久更新下载源（备用）</b>' +
+          '<div class="muted" style="margin-top:4px">内置更新源全部失效或下载中断时才会启用这里填写的地址。可填 version.json 清单地址，也可直接填 APK 下载直链。</div>' +
+          '<div class="field" style="margin-top:8px"><label>备用地址</label>' +
+            '<input class="input" id="updSrc" placeholder="https://…/version.json 或 https://…/app.apk" value="' +
+              Core.escapeHtml((store.settings && store.settings.updateUrl) || "") + '" /></div>' +
+          '<button class="btn ghost small block" onclick="App.saveUpdateUrl()">保存并重新检查</button>' +
+        "</div>" +
         '<div class="hint" style="margin-top:14px">' + icon("refresh", 13) +
           "<span>" + (nativeMode
             ? "更新为覆盖安装，不会清除本机已生成的文案、资料与会员状态。首次更新需在系统提示里允许「安装未知应用」。"
@@ -4801,7 +4809,7 @@ window.SEED = {
           '<div class="muted" style="margin-top:10px;line-height:1.6">添加时请备注「朋友圈 AI 助手」，并说明你的手机号与所选会员档位，支付后即可获取激活码。</div>' +
         "</div>" +
         '<div class="card mt12">' +
-          '<div class="m-row" onclick="App.go(\'member\')"><span>查看会员档位</span><em>月 / 季 / 年 / 永久 ›</em></div>' +
+          '<div class="m-row" onclick="App.go(\'member\')"><span>查看会员档位</span><em>月 / 季 / 年 / 二年 ›</em></div>' +
           '<div class="m-row" onclick="Auth.vipView(\'code\')"><span>输入激活码</span><em>已付费用户 ›</em></div>' +
         "</div>" +
         '<div class="hint" style="margin-top:14px;justify-content:center">' + icon("user", 13) +
@@ -4915,7 +4923,7 @@ window.SEED = {
     const me = (window.Auth && Auth.current) || null;
     const mm = (me && me.member) || null;
     const memberLine = mm
-      ? (mm.tier === 4 ? "永久会员 · 无限期"
+      ? (mm.tier === 4 && mm.daysLeft === -1 ? "永久会员 · 无限期"
         : mm.tier >= 1 && mm.expiresAt > Date.now() ? mm.tierName + " · 剩余 " + mm.daysLeft + " 天"
         : mm.trialEndsAt > Date.now() ? "免费试用 · 剩余 " + mm.daysLeft + " 天"
         : "会员已到期")
@@ -5451,7 +5459,7 @@ window.SEED = {
     { tier: 1, name: "月会员", price: 9.9, days: 30, tag: "灵活体验" },
     { tier: 2, name: "季度会员", price: 19.9, days: 90, tag: "省 33%" },
     { tier: 3, name: "年度会员", price: 59.9, days: 365, tag: "最划算" },
-    { tier: 4, name: "永久会员", price: 99, days: 0, tag: "一次买断" }
+    { tier: 4, name: "二年会员", price: 99, days: 730, tag: "一次买断" }
   ];
 
   let seq = 0;
@@ -5538,10 +5546,10 @@ window.SEED = {
     const trialEnd = (acc.trialStart || now) + 7 * DAY;
     const tier = acc.tier || 0;
     const expires = acc.expires || 0;
-    const paid = tier === 4 || (tier >= 1 && expires > now);
+    const paid = tier >= 1 && (expires > now || expires === 0);
     const trial = trialEnd > now;
     let daysLeft = 0;
-    if (tier === 4) daysLeft = -1;
+    if (tier === 4 && !expires) daysLeft = -1;
     else if (paid) daysLeft = Math.ceil((expires - now) / DAY);
     else if (trial) daysLeft = Math.ceil((trialEnd - now) / DAY);
     return {
@@ -5777,14 +5785,15 @@ window.SEED = {
     if (!hit) return { ok: false, error: "激活码不正确，请核对后重试" };
     const now = Date.now();
     const cur = acc[phone];
-    if (cur.tier === 4) return { ok: true, member: fakeMember(cur), msg: "当前已是永久会员" };
+    // 早期售出的「永久会员」expires=0，保留无限期，不再变更
+    if (cur.tier === 4 && !cur.expires) return { ok: true, member: fakeMember(cur), msg: "当前已是永久会员，无需再开通" };
     const base = (cur.tier >= 1 && cur.expires > now) ? cur.expires : now;
     const days = (TIERS.find((t) => t.tier === hit) || {}).days || 0;
     cur.tier = hit;
-    cur.expires = hit === 4 ? 0 : base + days * DAY;
+    cur.expires = base + days * DAY;
     cur.pending = 0;
     fakeSave(acc);
-    return { ok: true, member: fakeMember(cur), msg: hit === 4 ? "永久会员已开通" : ((TIERS.find((t) => t.tier === hit) || {}).name || "会员") + "已开通" };
+    return { ok: true, member: fakeMember(cur), msg: ((TIERS.find((t) => t.tier === hit) || {}).name || "会员") + "已开通" };
   }
 
   async function genDevCode(phone, tier, pwd) {
@@ -6102,7 +6111,7 @@ window.SEED = {
   }
 
   function statusText(m) {
-    if (m.tier === 4) return "永久会员 · 无限期使用";
+    if (m.tier === 4 && m.daysLeft === -1) return "永久会员 · 无限期使用";
     if (m.tier >= 1 && m.expiresAt > Date.now()) return m.tierName + " · 剩余 " + m.daysLeft + " 天";
     if (m.trialEndsAt > Date.now()) return "免费试用 · 剩余 " + m.daysLeft + " 天";
     return "免费试用已结束";
@@ -8158,13 +8167,14 @@ window.SEED = {
 
   /* ---------- 检查更新 ---------- */
 
-  // 更新源：优先用「我的 → 检查更新」里填写的永久地址，其次用打包时写入的 meta
+  // 更新源：内置源（打包时写进 meta）优先，用户在「检查更新」里填的永久源作为备用追加在末尾
   function updateManifestUrls() {
-    const custom = store.settings && store.settings.updateUrl ? String(store.settings.updateUrl).trim() : "";
-    if (custom) return custom.split(",").map((s) => s.trim()).filter(Boolean);
     const m = document.querySelector('meta[name="pyq-update"]');
     const raw = m ? String(m.getAttribute("content") || "") : "";
-    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const builtin = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const custom = store.settings && store.settings.updateUrl ? String(store.settings.updateUrl).trim() : "";
+    const extra = custom ? custom.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    return builtin.concat(extra);
   }
 
   // 兼容两种格式：单条 JSON，或 NDJSON 多行（逐行从后往前找带 versionCode 的消息）
@@ -8282,7 +8292,7 @@ window.SEED = {
     s.auto = true;
     s.latest = null;
     s.hasNew = false;
-    toast(v ? "永久更新源已保存，正在检查…" : "已恢复内置更新源，正在检查…");
+    toast(v ? "备用更新源已保存，正在重新检查…" : "已清空备用更新源，正在重新检查…");
     checkUpdate();
   }
 
@@ -8298,7 +8308,10 @@ window.SEED = {
     s.error = "";
     if (ui.page === "update") render();
     try {
-      const r = await NativeApp.installUpdate(m.url);
+      // 备用下载源：用户填的 APK 直链优先，其次用版本清单里的地址
+      const custom = store.settings && store.settings.updateUrl ? String(store.settings.updateUrl).trim() : "";
+      const direct = custom.split(",").map((s) => s.trim()).filter((u) => /\.apk(\?|$)/i.test(u));
+      const r = await NativeApp.installUpdate(direct.length ? direct[0] : m.url);
       if (!r || !r.ok) throw new Error((r && r.error) || "下载失败");
       s.state = "done";
       toast("安装包已下载，请在系统弹窗中确认安装");

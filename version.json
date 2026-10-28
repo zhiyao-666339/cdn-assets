@@ -1,15 +1,13 @@
 {
-  "versionCode": 21,
-  "versionName": "1.11.1",
-  "url": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.11.1.apk",
-  "size": 2591528,
-  "md5": "6bace3604cc9f15f25252fd83cfaa515",
+  "versionCode": 22,
+  "versionName": "1.12.0",
+  "url": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.12.0.apk",
+  "size": 2591964,
+  "md5": "8cc7f71e0318ca05e5d63acee8acdde4",
   "notes": [
-    "修复：检查更新时某个 CDN 缓存滞后会返回旧版本清单，导致明明有新版本却提示「已是最新」",
-    "修复：更新源改为多源比对，取所有源中版本号最高的一份，单一源失效或滞后不再影响更新",
-    "修复：版本清单请求附加防缓存时间戳，绕过 jsDelivr 对 @main 分支的长缓存",
-    "修复：安装包下载遇到「Connection reset」不再直接失败，自动切换 fastly / gcore / testingcf 镜像并重试",
-    "优化：下载前校验安装包完整性，大小不符自动换源重下，避免装到残缺包",
-    "优化：新增 GitHub Pages 作为首选更新源（缓存仅 10 分钟），raw 与 jsDelivr 作为备用源"
+    "新增：「检查更新」页下方增加永久更新下载源输入框，内置源全部失效时可填自己的 version.json 或 APK 直链作为备用",
+    "调整：会员最高档由「永久会员」改为「二年会员」，有效期 730 天，价格与一次买断方式不变",
+    "说明：此前已开通永久会员的用户保持无限期有效，不受本次调整影响",
+    "保留：更新多源比对、下载自动切换镜像并重试等容错能力"
   ]
 }
