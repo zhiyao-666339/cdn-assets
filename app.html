@@ -1949,6 +1949,11 @@ img.hist-media { cursor: pointer; }
 <script>
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
+  // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
+  APP_VERSION_CODE: 23,
+  APP_VERSION_NAME: "1.13.0",
+  // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
+  versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
   user: {
     name: "",
@@ -2708,6 +2713,192 @@ window.SEED = {
       });
     out += escapeHtml(raw.slice(cursor));
     return out || src;
+  }
+
+  /* ---------- 媒体合规浅检测 ----------
+   * 前端能做的：文件名/路径违禁词、尺寸、格式、文件大小、视频时长、
+   * 图片 EXIF 作者/GPS 字段扫描、画布像素二维码识别（有限）。
+   * 画面内容（违禁画面、人脸、未成年人、色情暴力、水印、二维码）
+   * 必须依赖云端 AI 审核（腾讯云内容安全 / 阿里云绿网 / 智谱等），
+   * 前端浏览器无法独立跑视觉大模型。用户可在「AI 模型接入」页配置
+   * 云端审核接口（预留，后续接腾讯云/阿里云免费额度）。
+   */
+
+  // 图片合规浅检测（文件 File 或 {name, type, size, width, height, exif}）
+  async function checkImage(file, desc) {
+    const v = [];
+    const name = file && file.name ? file.name : "";
+    const size = file && typeof file.size === "number" ? file.size : 0;
+    const type = file && file.type ? file.type.toLowerCase() : "";
+    const words = [name, desc || ""].filter(Boolean).join(" ");
+
+    // 1. 文件名 / 描述 违禁词
+    const t0 = checkText(words);
+    if (t0.violations && t0.violations.length) {
+      t0.violations.forEach((vi) =>
+        v.push({ word: vi.word, category: vi.category, reason: "文件名/描述命中：" + vi.reason, suggestion: vi.suggestion }));
+    }
+
+    // 2. 格式
+    if (type && !/image\/(jpe?g|png|gif|webp)/i.test(type)) {
+      v.push({ word: type, category: "格式风险", reason: "微信朋友圈仅支持 JPG / PNG / GIF / WebP，" + type.replace("image/","").toUpperCase() + " 会被拒绝或显示异常", suggestion: "转为 JPG 或 PNG" });
+    }
+    // 3. 文件大小（朋友圈单图上限约 10MB，超过会被服务器强压缩糊掉）
+    const MB = 1024 * 1024;
+    if (size && size > 10 * MB) {
+      v.push({ word: (size / MB).toFixed(1) + "MB", category: "文件过大", reason: "朋友圈图片超过 10MB 会被强制压缩，发布后会糊", suggestion: "压缩到 5MB 内" });
+    }
+    if (size && size > 2 * MB && size <= 10 * MB) {
+      v.push({ word: (size / MB).toFixed(1) + "MB", category: "文件较大", reason: "图片超过 2MB 仍会被压缩，建议 2MB 内更清晰", suggestion: "压缩到 2MB 内" });
+    }
+
+    // 4. 尺寸：最长边 ≤1600px 朋友圈展示最清晰（否则会被缩）
+    // 如果传的是 File 浏览器版，可用 canvas 读出真实宽高
+    let width = file && file.width ? file.width : 0;
+    let height = file && file.height ? file.height : 0;
+    if (file && file instanceof File && file.type && file.type.startsWith("image/")) {
+      try {
+        const url = URL.createObjectURL(file);
+        const im = await new Promise((res, rej) => {
+          const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url;
+        });
+        width = im.naturalWidth; height = im.naturalHeight;
+        URL.revokeObjectURL(url);
+      } catch (e) { /* 跨域或解码失败，跳过 */ }
+    }
+    if (width && height) {
+      const max = Math.max(width, height);
+      if (max > 3000) {
+        v.push({ word: width + "x" + height, category: "分辨率过高", reason: "分辨率超过 3000px，朋友圈会强压缩且可能被平台判作引流图", suggestion: "最长边缩到 1600px 内" });
+      } else if (max > 1600) {
+        v.push({ word: width + "x" + height, category: "分辨率较大", reason: "建议最长边 ≤1600px，朋友圈展示更清晰", suggestion: "最长边缩到 1600px 内" });
+      }
+    }
+
+    // 5. 文件名可疑：带 .exe / .bat / 双后缀（xxx.jpg.exe）
+    if (/\.(exe|bat|cmd|vbs|scr|com)\b/i.test(name)) {
+      v.push({ word: name, category: "可执行文件", reason: "文件名带可执行后缀，朋友圈禁止传播", suggestion: "只允许图片后缀" });
+    }
+    if (/\.([a-z0-9]+)\.jpg$/i.test(name) || /\.([a-z0-9]+)\.png$/i.test(name)) {
+      v.push({ word: name, category: "双后缀", reason: "文件名带双后缀（如 xxx.jpg.xxx），可疑文件", suggestion: "只保留真实后缀" });
+    }
+
+    // 6. EXIF 作者/软件/相机型号 / GPS（仅浏览器 File 版，Android 原生不支持 EXIF 解析）
+    if (file && file instanceof File && file.type && file.type.startsWith("image/")) {
+      try {
+        const arrBuf = await file.slice(0, 65536).arrayBuffer();
+        const exif = parseExifPreview(new Uint8Array(arrBuf));
+        if (exif && exif.Software && /(微信|QQ|抖音|快手|微博|小红书|淘宝|拼多多)/i.test(exif.Software)) {
+          v.push({ word: exif.Software, category: "多平台来源", reason: "EXIF 显示图片来自" + exif.Software + "，直接转发可能被朋友圈降权", suggestion: "导出重压缩后再发，或确认自己有使用权限" });
+        }
+        if (exif && exif.Artist && checkText(exif.Artist).violations.length) {
+          v.push({ word: exif.Artist, category: "EXIF 作者违规", reason: "图片内置的作者字段含违规词", suggestion: "清除 EXIF 后再发" });
+        }
+      } catch (e) { /* 非 JPEG 没 EXIF，跳过 */ }
+    }
+
+    const pass = !v.some((x) => x.category === "可执行文件" || x.category === "双后缀");
+    return { passed: pass, count: v.length, violations: v, media: { kind: "image", file: name, type, size, width, height } };
+  }
+
+  // 视频合规浅检测
+  async function checkVideo(file, desc) {
+    const v = [];
+    const name = file && file.name ? file.name : "";
+    const size = file && typeof file.size === "number" ? file.size : 0;
+    const type = file && file.type ? file.type.toLowerCase() : "";
+    const words = [name, desc || ""].filter(Boolean).join(" ");
+
+    const t0 = checkText(words);
+    if (t0.violations && t0.violations.length) {
+      t0.violations.forEach((vi) =>
+        v.push({ word: vi.word, category: vi.category, reason: "文件名/描述命中：" + vi.reason, suggestion: vi.suggestion }));
+    }
+
+    if (type && !/video\/(mp4|quicktime|webm|x-m4v)/i.test(type)) {
+      v.push({ word: type, category: "格式风险", reason: "朋友圈仅支持 MP4，" + type.replace("video/","").toUpperCase() + " 不会被识别", suggestion: "转为 H.264 MP4" });
+    }
+
+    const MB = 1024 * 1024;
+    if (size && size > 50 * MB) {
+      v.push({ word: (size / MB).toFixed(1) + "MB", category: "文件过大", reason: "朋友圈视频上限约 50MB，超过会上传失败", suggestion: "压缩到 50MB 内" });
+    }
+
+    let duration = 0;
+    if (file && file instanceof File && file.type && file.type.startsWith("video/")) {
+      try {
+        const url = URL.createObjectURL(file);
+        const el = document.createElement("video");
+        el.preload = "metadata";
+        await new Promise((res, rej) => {
+          el.onloadedmetadata = () => res();
+          el.onerror = rej;
+          el.src = url;
+        });
+        duration = isFinite(el.duration) ? el.duration : 0;
+        URL.revokeObjectURL(url);
+      } catch (e) { /* 跳过 */ }
+    }
+    if (duration > 30) {
+      v.push({ word: Math.round(duration) + "s", category: "超时", reason: "朋友圈视频建议 ≤30 秒，超过会被平台降权甚至不推荐", suggestion: "剪到 30 秒内" });
+    }
+    if (duration > 60) {
+      v.push({ word: Math.round(duration) + "s", category: "严重超时", reason: "视频超过 60 秒很可能上传失败或被折叠成链接", suggestion: "剪到 30 秒内" });
+    }
+
+    if (/\.(exe|bat|cmd|vbs|scr|com)\b/i.test(name)) {
+      v.push({ word: name, category: "可执行文件", reason: "文件名带可执行后缀，朋友圈禁止传播", suggestion: "只允许视频后缀" });
+    }
+
+    const pass = !v.some((x) => /^严重超|可执行文件/i.test(x.category));
+    return { passed: pass, count: v.length, violations: v, media: { kind: "video", file: name, type, size, duration } };
+  }
+
+  // 极简 EXIF 预览：只解析 JPEG SOI + APP1 里的 TIFF IFD 前几个常用字段
+  function parseExifPreview(bytes) {
+    try {
+      if (bytes.length < 2) return null;
+      // JPEG SOI marker
+      if (!(bytes[0] === 0xFF && bytes[1] === 0xD8)) return null;
+      // 找 APP1 marker (0xFFE1)
+      let i = 2;
+      while (i < bytes.length - 3) {
+        if (bytes[i] === 0xFF && bytes[i + 1] === 0xE1) break;
+        i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3]);
+      }
+      if (i >= bytes.length - 4) return null;
+      const len = (bytes[i + 2] << 8) | bytes[i + 3];
+      const tiffStart = i + 8;
+      if (bytes[tiffStart] !== 0x49 || bytes[tiffStart + 1] !== 0x49) return null; // 非 II little-endian
+      const little = bytes[tiffStart] === 0x49;
+      const u16 = (o) => little ? (bytes[o + 1] << 8 | bytes[o]) : (bytes[o] << 8 | bytes[o + 1]);
+      const u32 = (o) => little ? (bytes[o + 3] << 24 | bytes[o + 2] << 16 | bytes[o + 1] << 8 | bytes[o])
+                                : (bytes[o] << 24 | bytes[o + 1] << 16 | bytes[o + 2] << 8 | bytes[o + 3]);
+      const firstIFD = u32(tiffStart + 4) + tiffStart;
+      const count = u16(firstIFD);
+      const out = {};
+      for (let j = 0; j < count; j++) {
+        const e = firstIFD + 2 + j * 12;
+        const tag = u16(e);
+        const type = u16(e + 2);
+        if (type !== 2) continue; // 只处理 ASCII
+        const num = u32(e + 4);
+        const valOff = u32(e + 8);
+        const strStart = num <= 4 ? e + 8 : (tiffStart + valOff);
+        let s = "";
+        for (let k = 0; k < num - 1 && (strStart + k) < bytes.length; k++) {
+          const b = bytes[strStart + k];
+          if (b === 0) break;
+          s += String.fromCharCode(b);
+        }
+        if (tag === 0x010F) out.Make = s;
+        else if (tag === 0x0110) out.Model = s;
+        else if (tag === 0x0131) out.Software = s;
+        else if (tag === 0x013B) out.Artist = s;
+        else if (tag === 0x010E) out.ImageDescription = s;
+      }
+      return out;
+    } catch (e) { return null; }
   }
 
   /* ---------- 防折叠 ---------- */
@@ -3481,6 +3672,7 @@ window.SEED = {
 
   window.Core = {
     store, ui, save, checkText, replaceText, highlight, foldInfo,
+    checkImage, checkVideo,
     generate, polish, applyStyles, escapeHtml, nowISO, todayKey, now, syncServerTime,
     timeAgo, typeById, topicById, slotById, uid, DEFAULTS, SIZE_LABEL, SHORT_MAX, applyLiveRules,
     CATEGORY_REASON, LEGACY_COPY_TYPE,
@@ -7829,6 +8021,20 @@ window.SEED = {
     for (let i = 0; i < list.length; i++) {
       const file = list[i];
       toast("正在处理图片 " + (i + 1) + "/" + list.length + "…");
+
+      // 媒体合规浅检测
+      const cm = await Core.checkImage(file);
+      if (!cm.passed) {
+        const info = Core.blockInfo(cm);
+        recordMedia({
+          kind: "image", status: "已拦截", title: file.name, source: "图片上传",
+          category: info.category, word: info.word,
+          reason: "媒体合规浅检测未通过：" + (cm.violations[0] && cm.violations[0].reason || "")
+        });
+        toast("「" + file.name + "」疑似风险，已跳过并记入拦截记录");
+        continue;
+      }
+
       let src, thumb, uploadBlob, ext = "jpg";
       try {
         src = await compressImage(file, 1280, 0.82);
@@ -8077,6 +8283,20 @@ window.SEED = {
     let done = 0;
     for (let i = 0; i < list.length; i++) {
       const file = list[i];
+
+      // 媒体合规浅检测
+      const cv = await Core.checkVideo(file);
+      if (!cv.passed) {
+        const info = Core.blockInfo(cv);
+        recordMedia({
+          kind: "video", status: "已拦截", title: file.name, source: "视频上传",
+          category: info.category, word: info.word,
+          reason: "媒体合规浅检测未通过：" + (cv.violations[0] && cv.violations[0].reason || "")
+        });
+        toast("「" + file.name + "」疑似风险，已跳过并记入拦截记录");
+        continue;
+      }
+
       const safe = (file.name || "video").replace(/[\\/:*?"<>|]/g, "");
       const v = {
         id: uid("v"), kind: "video", title: safe, source: "视频上传", time: nowISO(),
@@ -8895,6 +9115,32 @@ window.SEED = {
     if (ui.sync.pending.length && ui.sync.auto) setTimeout(flushSync, 800);
     // 每次打开自动对齐服务端规则库（服务端每天 0 点联网更新，这里按需拉取）
     loadLiveRules(false);
+    // 网页版自动更新提示：比对远程 version.json，落后 ≥1 弹顶部提示
+    if (!(window.NativeApp && NativeApp.available()) && window.fetch) {
+      (async () => {
+        const localCode = (window.SEED && SEED.APP_VERSION_CODE) || 0;
+        const localName = (window.SEED && SEED.APP_VERSION_NAME) || "";
+        const url = (window.SEED && SEED.versionJsonUrl) || "";
+        if (!url || !localCode) return;
+        try {
+          const res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
+          if (!res.ok) return;
+          const remote = await res.json();
+          if ((remote.versionCode || 0) > localCode) {
+            const note = (remote.notes && remote.notes[0]) || "";
+            const banner = document.createElement("div");
+            banner.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#7A5AF8;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.15);transform:translateY(0);transition:transform .2s";
+            banner.innerHTML =
+              '<span style="flex:1">发现新版本 v' + (remote.versionName || "") +
+              (note ? '：' + note : '') +
+              '</span><button style="background:#fff;color:#7A5AF8;border:none;padding:6px 12px;border-radius:16px;font-weight:600" onclick="location.reload()">刷新到最新版</button>' +
+              '<button style="background:transparent;border:none;color:rgba(255,255,255,.7);font-size:18px" aria-label="关闭" onclick="this.parentElement.style.display=\'none\'">×</button>';
+            document.body.appendChild(banner);
+            toast("发现新版本 v" + remote.versionName + "，点顶部提示刷新");
+          }
+        } catch (e) { /* 网络或 JSON 错误都静默 */ }
+      })();
+    }
     // 云同步：已登录云账号时启动即对齐，之后每 3 分钟拉一次
     if (window.Cloud) {
       Cloud.init();
