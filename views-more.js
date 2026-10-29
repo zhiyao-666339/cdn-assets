@@ -485,6 +485,69 @@
       "</div>";
   }
 
+  /* ---------- 云端媒体审核卡片 ---------- */
+  function renderModerationCard(ai) {
+    const mod = (ai && ai.moderate) || {};
+    const providers = [
+      { id: "zhipu", name: "智谱视觉（免费额度最多）", hint: "open.bigmodel.cn 注册拿 API Key，每月有免费额度" },
+      { id: "tencent", name: "腾讯云 IM（TC3 签名）", hint: "ims.tencentcloudapi.com，需 SecretId / SecretKey，ap-guangzhou 区域" },
+      { id: "alibaba", name: "阿里云绿网（HMAC-SHA1）", hint: "green.cn-shanghai.aliyuncs.com，需 AccessKeyId / AccessKeySecret" },
+      { id: "proxy", name: "自建代理（网页版/通用）", hint: "用户自建 Node/Python 代理，代理持签名密钥，前端只给代理 URL" }
+    ];
+    const provStatus = !mod.enabled ? "已关闭（仅本地浅检）" :
+      mod.provider === "proxy" ? (mod.proxyUrl ? "自建代理" : "代理未配置") :
+      (mod.provider === "zhipu" ? (mod.apiKey ? "智谱视觉" : "未填 Key") :
+      mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "腾讯云 IM" : "密钥未填") :
+      mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "阿里云绿网" : "密钥未填") :
+      mod.provider);
+
+    const selected = mod.provider || "zhipu";
+    const enabled = !!mod.enabled;
+
+    // 根据选中的提供商动态显示输入框
+    let providerFields = "";
+    if (selected === "zhipu") {
+      providerFields =
+        aiField("aiModZhipuKey", "智谱 API Key", mod.apiKey || "", "在 bigmodel.cn 控制台获取", "password");
+    } else if (selected === "tencent") {
+      providerFields =
+        aiField("aiModTencentSid", "SecretId", mod.secretId || "", "腾讯云访问管理里获取") +
+        aiField("aiModTencentSkey", "SecretKey", mod.secretKey || "", "腾讯云访问管理里获取", "password") +
+        aiField("aiModTencentRegion", "区域 Region", mod.region || "ap-guangzhou", "ap-guangzhou （默认华南）");
+    } else if (selected === "alibaba") {
+      providerFields =
+        aiField("aiModAlibabaAk", "AccessKeyId", mod.secretId || "", "阿里云访问控制 RAM 里获取") +
+        aiField("aiModAlibabaSk", "AccessKeySecret", mod.secretKey || "", "阿里云访问控制 RAM 里获取", "password");
+    } else if (selected === "proxy") {
+      providerFields =
+        aiField("aiModProxyUrl", "自建代理地址", mod.proxyUrl || "", "https://your-proxy.example.com") +
+        '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) +
+          "<span>代理须支持 POST /moderate，body 包含 {provider, task, fileBase64, mimeType}；代理端完成签名后返回归一化结果。</span></div>";
+    }
+
+    const providerOptions = providers.map((p) =>
+      '<option value="' + p.id + '"' + (selected === p.id ? " selected" : "") + ">" + p.name + "</option>"
+    ).join("");
+    const currentHint = (providers.find((p) => p.id === selected) || {}).hint || "";
+
+    return (
+      '<div class="card mt12">' +
+        aiSecHead("shield", "云端媒体审核", provStatus) +
+        '<div class="muted" style="margin:0 0 8px">在本地浅检（文件名/格式/大小/EXIF）之后，把图片/视频送到云端做画面语义审核。App 内原生 HTTP + 原生签名，密钥不暴露；网页版只能走自建代理。</div>' +
+        '<div class="field"><label style="display:flex;align-items:center;gap:8px">' +
+          '<input type="checkbox" id="aiModerateEnabled"' + (enabled ? " checked" : "") + ' style="width:18px;height:18px;accent-color:#7A5AF8" />' +
+          "<b>开启云端深度审核</b>（关闭时仅本地浅检）</label></div>" +
+        '<div class="field"><label>审核服务提供商</label>' +
+          '<select class="input" id="aiModerateProvider" onchange="App.go(\'ai\')">' +
+          providerOptions + "</select></div>" +
+        '<div class="hint" style="margin:-4px 0 10px">' + icon("alert", 13) +
+          "<span>" + currentHint + "</span></div>" +
+        providerFields +
+        '<button class="btn soft block" onclick="App.aiTest(\'moderate\')">测试云端审核</button>' +
+      "</div>"
+    );
+  }
+
   function renderAI() {
     const ai = (store.settings && store.settings.ai) || {};
     const t = ai.text || {}, im = ai.image || {}, vd = ai.video || {};
@@ -529,6 +592,8 @@
           '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
         "</div>" +
 
+        renderModerationCard(ai) +
+
         '<button class="btn primary block mt12" onclick="App.aiSaveSettings()">保存 AI 模型设置</button>' +
         '<div class="hint" style="margin-top:12px">' + icon("spark", 13) +
           "<span>省事方案：文案和视频都用智谱（同一个 Key，注册一次即可），图片直接用免费通道，零配置。</span></div>" +
@@ -547,9 +612,14 @@
 
   function aiMenuNote() {
     const ai = (store.settings && store.settings.ai) || {};
-    const t = ai.text || {}, im = ai.image || {}, vd = ai.video || {};
+    const t = ai.text || {}, im = ai.image || {}, vd = ai.video || {}, mod = ai.moderate || {};
     const imgState = im.mode === "free" ? "图片免费通道" : (im.base && im.key ? "图片自定义" : "图片未配置");
-    return (t.base && t.key ? "文案已接入" : "文案未配置") + " · " + imgState + (vd.base && vd.key ? " · 视频已接入" : "");
+    const modState = !mod.enabled ? "云审关闭" :
+      mod.provider === "proxy" ? (mod.proxyUrl ? "云审代理" : "云审未填代理") :
+      (mod.provider === "zhipu" ? (mod.apiKey ? "云审智谱" : "云审未填 Key") :
+      mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "云审腾讯" : "云审未填密钥") :
+      mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "云审阿里" : "云审未填密钥") : "云审已开启");
+    return (t.base && t.key ? "文案已接入" : "文案未配置") + " · " + imgState + (vd.base && vd.key ? " · 视频已接入" : "") + " · " + modState;
   }
 
   function renderMore() {

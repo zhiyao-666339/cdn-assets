@@ -104,6 +104,17 @@
           if (typeof ai.video.base !== "string") ai.video.base = "";
           if (typeof ai.video.key !== "string") ai.video.key = "";
           if (typeof ai.video.model !== "string") ai.video.model = "";
+          // 云端媒体审核：默认关闭，用户选择提供商后启用
+          if (!ai.moderate || typeof ai.moderate !== "object") {
+            ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
+          }
+          if (typeof ai.moderate.enabled !== "boolean") ai.moderate.enabled = false;
+          if (!ai.moderate.provider) ai.moderate.provider = "zhipu";
+          if (typeof ai.moderate.apiKey !== "string") ai.moderate.apiKey = "";
+          if (typeof ai.moderate.secretId !== "string") ai.moderate.secretId = "";
+          if (typeof ai.moderate.secretKey !== "string") ai.moderate.secretKey = "";
+          if (!ai.moderate.region) ai.moderate.region = "ap-guangzhou";
+          if (typeof ai.moderate.proxyUrl !== "string") ai.moderate.proxyUrl = "";
           // 旧版图片接口配置迁移到 ai.image，用户已填过的设置不丢失
           if (!s.settings.imageApi) s.settings.imageApi = { base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
           if (s.settings.imageApi.base && !ai.image.base) {
@@ -404,6 +415,120 @@
 
     const pass = !v.some((x) => /^严重超|可执行文件/i.test(x.category));
     return { passed: pass, count: v.length, violations: v, media: { kind: "video", file: name, type, size, duration } };
+  }
+
+  /* ---------- 云端媒体审核（App 走原生，Web 走自建代理） ----------
+   * 调用前必须先过浅检测；云端只做画面/语义层面的深度检测。
+   * 返回值与 checkImage/checkVideo 结构对齐：{ passed, count, violations, provider? }
+   * 如果云端不可用，降级为"不阻断"，把错误记一条 violation，避免上传流程卡死。
+   */
+  async function moderateMedia(fileOrDataUrl, kind) {
+    const cfg = ((store.settings && store.settings.ai && store.settings.ai.moderate) || {});
+    if (!cfg.enabled) return null; // 未开启云端审核，跳过
+
+    // 拿到 base64 payload 和 mime
+    let b64 = "";
+    let mime = "";
+    try {
+      if (typeof fileOrDataUrl === "string" && fileOrDataUrl.startsWith("data:")) {
+        const comma = fileOrDataUrl.indexOf(",");
+        b64 = fileOrDataUrl.slice(comma + 1);
+        mime = (fileOrDataUrl.match(/^data:([^;]+)/) || [, ""])[1];
+      } else if (fileOrDataUrl instanceof Blob) {
+        mime = fileOrDataUrl.type || (kind === "image" ? "image/jpeg" : "video/mp4");
+        b64 = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result || "").split(",")[1] || "");
+          fr.onerror = () => reject(new Error("读取文件失败"));
+          fr.readAsDataURL(fileOrDataUrl);
+        });
+      }
+    } catch (e) {
+      return { passed: true, count: 0, violations: [], note: "云端审核跳过：文件读取失败" };
+    }
+    if (!b64) return { passed: true, count: 0, violations: [], note: "云端审核跳过：无文件数据" };
+
+    // App 内走原生 Bridge
+    if (window.NativeApp && NativeApp.available() && NativeApp.aiModerate) {
+      const provider = cfg.provider || "zhipu";
+      const s1 = cfg.secretId || cfg.apiKey || "";
+      const s2 = cfg.secretKey || "";
+      const region = cfg.region || "ap-guangzhou";
+      try {
+        const r = await NativeApp.aiModerate(provider, s1, s2, region, kind, b64, mime);
+        if (!r || !r.ok) {
+          return { passed: true, count: 0, violations: [{
+            category: "云审异常", word: "", reason: (r && r.error) || "云端审核请求失败",
+            suggestion: "请检查审核服务配置"
+          }], provider };
+        }
+        const v = (r.violations || []).map((vi) => ({
+          word: vi.word || "", category: vi.category || "云审违规",
+          reason: (vi.reason || "云端检测未通过") + (r.provider ? "（" + r.provider + "）" : ""),
+          suggestion: vi.suggestion || "删除后重新发布",
+          provider: r.provider
+        }));
+        return {
+          passed: !r.blocked,
+          count: v.length,
+          violations: v,
+          provider: r.provider || provider
+        };
+      } catch (e) {
+        return { passed: true, count: 0, violations: [{
+          category: "云审异常", word: "", reason: "原生审核调用失败：" + (e.message || e),
+          suggestion: "请重启 App 或关闭云端审核"
+        }] };
+      }
+    }
+
+    // 网页版走自建代理（用户填 proxyUrl，代理持签名密钥）
+    const proxyUrl = cfg.proxyUrl || "";
+    if (!proxyUrl) return { passed: true, count: 0, violations: [{
+      category: "云审未配置", word: "",
+      reason: "网页版云端审核需要用户自建代理（密钥不能放浏览器）",
+      suggestion: "填一个自建代理地址，或关闭云端审核"
+    }] };
+
+    try {
+      const res = await fetch(proxyUrl.replace(/\/+$/, "") + "/moderate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: cfg.provider || "zhipu",
+          task: kind,
+          fileBase64: b64,
+          mimeType: mime
+        })
+      });
+      const txt = await res.text();
+      let data; try { data = JSON.parse(txt); } catch { data = null; }
+      if (!res.ok || !data || !data.ok) {
+        return { passed: true, count: 0, violations: [{
+          category: "云审代理异常", word: "",
+          reason: (data && data.error) || ("代理返回 HTTP " + res.status),
+          suggestion: "检查自建代理是否已配置"
+        }] };
+      }
+      const v = (data.violations || []).map((vi) => ({
+        word: vi.word || "", category: vi.category || "云审违规",
+        reason: (vi.reason || "代理检测未通过") + (data.provider ? "（" + data.provider + "）" : ""),
+        suggestion: vi.suggestion || "删除后重新发布",
+        provider: data.provider
+      }));
+      return {
+        passed: !data.blocked,
+        count: v.length,
+        violations: v,
+        provider: data.provider || cfg.provider
+      };
+    } catch (e) {
+      return { passed: true, count: 0, violations: [{
+        category: "云审代理异常", word: "",
+        reason: "代理请求失败：" + (e.message || e),
+        suggestion: "检查代理地址和网络"
+      }] };
+    }
   }
 
   // 极简 EXIF 预览：只解析 JPEG SOI + APP1 里的 TIFF IFD 前几个常用字段
@@ -1224,7 +1349,7 @@
 
   window.Core = {
     store, ui, save, checkText, replaceText, highlight, foldInfo,
-    checkImage, checkVideo,
+    checkImage, checkVideo, moderateMedia,
     generate, polish, applyStyles, escapeHtml, nowISO, todayKey, now, syncServerTime,
     timeAgo, typeById, topicById, slotById, uid, DEFAULTS, SIZE_LABEL, SHORT_MAX, applyLiveRules,
     CATEGORY_REASON, LEGACY_COPY_TYPE,

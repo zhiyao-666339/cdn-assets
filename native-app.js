@@ -43,6 +43,7 @@
         else if (method === "aiChat") B.aiChat(args[0], args[1], args[2], args[3], cid);
         else if (method === "genVideo") B.genVideo(args[0], args[1], args[2], args[3], cid);
         else if (method === "saveMediaUrl") B.saveMediaUrl(args[0], args[1], !!args[2], cid);
+        else if (method === "aiModerate") B.aiModerate(args[0], args[1], args[2], args[3], args[4], args[5], args[6], cid);
         else resolve({ ok: false, error: "未知原生方法：" + method });
       } catch (e) {
         delete waiters[cid];
@@ -143,6 +144,9 @@
     genVideo: (base, key, model, prompt) => call("genVideo", [base, key, model, prompt]),
     // 把网络图片/视频保存到手机相册
     saveMediaUrl: (url, name, isVideo) => call("saveMediaUrl", [url, name, !!isVideo]),
+    // 云端媒体审核：provider(zhipu/tencent/alibaba) + 两档密钥 + region + task(image/video) + base64 + mime
+    aiModerate: (provider, secretIdOrKey, secretKey, region, task, payloadB64, mimeType) =>
+      call("aiModerate", [provider, secretIdOrKey, secretKey, region, task, payloadB64, mimeType]),
     builtinRules,
     toast: (msg) => { try { B.toast(String(msg)); } catch (e) {} },
     __cb: resolveCallback,

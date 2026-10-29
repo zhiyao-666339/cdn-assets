@@ -828,6 +828,7 @@
     if (!ai.text) ai.text = { base: "", key: "", model: "" };
     if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
     if (!ai.video) ai.video = { base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
     if (!ai.image.mode) ai.image.mode = "free";
     return ai;
   }
@@ -949,6 +950,23 @@
     ai.video.base = document.getElementById("aiVideoBase").value.trim();
     ai.video.key = document.getElementById("aiVideoKey").value.trim();
     ai.video.model = document.getElementById("aiVideoModel").value.trim();
+    // 云端审核
+    const modOn = document.getElementById("aiModerateEnabled");
+    const modProv = document.getElementById("aiModerateProvider");
+    ai.moderate.enabled = !!(modOn && modOn.checked);
+    ai.moderate.provider = (modProv && modProv.value) || ai.moderate.provider;
+    const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+    if (ai.moderate.provider === "zhipu") ai.moderate.apiKey = get("aiModZhipuKey");
+    else if (ai.moderate.provider === "tencent") {
+      ai.moderate.secretId = get("aiModTencentSid");
+      ai.moderate.secretKey = get("aiModTencentSkey");
+      ai.moderate.region = get("aiModTencentRegion") || "ap-guangzhou";
+    } else if (ai.moderate.provider === "alibaba") {
+      ai.moderate.secretId = get("aiModAlibabaAk");
+      ai.moderate.secretKey = get("aiModAlibabaSk");
+    } else if (ai.moderate.provider === "proxy") {
+      ai.moderate.proxyUrl = get("aiModProxyUrl");
+    }
     save();
     render();
     toast("AI 模型设置已保存");
@@ -979,6 +997,36 @@
       toast("正在测试图片接口…");
       const r = await NativeApp.genImage(ai.image.base, ai.image.key, ai.image.model, "一只橘猫趴在窗台上晒太阳", ai.image.size);
       toast(r && r.ok ? "图片接口连接成功，图片已存相册" : "图片接口失败：" + ((r && r.error) || ""));
+      return;
+    }
+    if (kind === "moderate") {
+      // 保存当前表单值到 store
+      const modProv = (document.getElementById("aiModerateProvider") || {}).value || ai.moderate.provider;
+      ai.moderate.provider = modProv;
+      if (modProv === "zhipu") ai.moderate.apiKey = (document.getElementById("aiModZhipuKey") || {}).value || ai.moderate.apiKey;
+      else if (modProv === "tencent") {
+        ai.moderate.secretId = (document.getElementById("aiModTencentSid") || {}).value || ai.moderate.secretId;
+        ai.moderate.secretKey = (document.getElementById("aiModTencentSkey") || {}).value || ai.moderate.secretKey;
+        ai.moderate.region = (document.getElementById("aiModTencentRegion") || {}).value || "ap-guangzhou";
+      } else if (modProv === "alibaba") {
+        ai.moderate.secretId = (document.getElementById("aiModAlibabaAk") || {}).value || ai.moderate.secretId;
+        ai.moderate.secretKey = (document.getElementById("aiModAlibabaSk") || {}).value || ai.moderate.secretKey;
+      } else if (modProv === "proxy") {
+        ai.moderate.proxyUrl = (document.getElementById("aiModProxyUrl") || {}).value || ai.moderate.proxyUrl;
+      }
+      save();
+      // 用内置的 1x1 红色 JPEG（base64）作为测试文件，包装成 data URL
+      const testB64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAr/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AV/9k=";
+      const testDataUrl = "data:image/jpeg;base64," + testB64;
+      toast("正在测试云端审核（" + modProv + "）…");
+      try {
+        const r = await Core.moderateMedia(testDataUrl, "image");
+        if (!r) { toast("未开启云端审核或未配置代理地址"); return; }
+        const cat = (r.violations || []).map((v) => v.category).join("、");
+        toast(r.passed ? "测试通过：未检测到违规（" + (r.provider || "") + "）" : "测试返回：" + (cat || "云端判定未通过") + "（" + (r.provider || "") + "）");
+      } catch (e) {
+        toast("云端审核测试失败：" + (e.message || e));
+      }
       return;
     }
     ai.video.base = document.getElementById("aiVideoBase").value.trim();
@@ -1386,6 +1434,25 @@
         continue;
       }
 
+      // 云端深度审核（在浅检之后）
+      let cloudResult = null;
+      try { cloudResult = await Core.moderateMedia(file, "image"); } catch (e) { cloudResult = null; }
+      const cloudV = cloudResult && cloudResult.violations ? cloudResult.violations : [];
+      const mergedPassed = !cloudResult || (cloudResult.passed && !cloudV.some((v) => /异常|未配置|代理/.test(v.category)));
+      if (cloudResult && cloudV.length && !mergedPassed) {
+        const info = Core.blockInfo({ violations: cloudV });
+        recordMedia({
+          kind: "image", status: "已拦截", title: file.name, source: "图片上传",
+          category: info.category, word: info.word,
+          reason: "云端审核未通过（" + (cloudResult.provider || "") + "）：" + (cloudV[0] && cloudV[0].reason || "")
+        });
+        toast("「" + file.name + "」云端审核未通过，已拦截");
+        continue;
+      } else if (cloudResult && cloudV.length) {
+        // 有疑似 violation 但未到 block 级别（Review 级别），只提示
+        toast("「" + file.name + "」云端审核有 " + cloudV.length + " 条疑似风险，建议人工复核");
+      }
+
       let src, thumb, uploadBlob, ext = "jpg";
       try {
         src = await compressImage(file, 1280, 0.82);
@@ -1646,6 +1713,24 @@
         });
         toast("「" + file.name + "」疑似风险，已跳过并记入拦截记录");
         continue;
+      }
+
+      // 云端深度审核
+      let cloudResult = null;
+      try { cloudResult = await Core.moderateMedia(file, "video"); } catch (e) { cloudResult = null; }
+      const cloudV = cloudResult && cloudResult.violations ? cloudResult.violations : [];
+      const mergedPassed = !cloudResult || (cloudResult.passed && !cloudV.some((v) => /异常|未配置|代理/.test(v.category)));
+      if (cloudResult && cloudV.length && !mergedPassed) {
+        const info = Core.blockInfo({ violations: cloudV });
+        recordMedia({
+          kind: "video", status: "已拦截", title: file.name, source: "视频上传",
+          category: info.category, word: info.word,
+          reason: "云端审核未通过（" + (cloudResult.provider || "") + "）：" + (cloudV[0] && cloudV[0].reason || "")
+        });
+        toast("「" + file.name + "」云端审核未通过，已拦截");
+        continue;
+      } else if (cloudResult && cloudV.length) {
+        toast("「" + file.name + "」云端审核有 " + cloudV.length + " 条疑似风险，建议人工复核");
       }
 
       const safe = (file.name || "video").replace(/[\\/:*?"<>|]/g, "");
@@ -2183,7 +2268,10 @@
   function updateManifestUrls() {
     const m = document.querySelector('meta[name="pyq-update"]');
     const raw = m ? String(m.getAttribute("content") || "") : "";
-    const builtin = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    let builtin = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    // 兜底：部分网页入口（cdn-assets/index.html）没有写 pyq-update meta，
+    // 此时用 data.js 里的 versionJsonUrl，避免「当前版本未配置更新地址」
+    if (!builtin.length && window.SEED && SEED.versionJsonUrl) builtin = [String(SEED.versionJsonUrl)];
     const custom = store.settings && store.settings.updateUrl ? String(store.settings.updateUrl).trim() : "";
     const extra = custom ? custom.split(",").map((s) => s.trim()).filter(Boolean) : [];
     return builtin.concat(extra);
@@ -2244,7 +2332,18 @@
       const v = NativeApp.versionInfo() || {};
       if (v.versionCode) return { code: Number(v.versionCode), name: v.versionName || "" };
     }
-    return { code: 0, name: "网页版" };
+    // 网页版：用构建号 + data.js 里的版本名
+    const code = Number((window.SEED && SEED.APP_VERSION_CODE) || 0);
+    return { code: code, name: (window.SEED && SEED.APP_VERSION_NAME) || "网页版" };
+  }
+
+  // 当前环境该比哪个字段：App 比 APK 版号，网页比 webBuild
+  function isNativeApp() {
+    return !!(window.NativeApp && NativeApp.available());
+  }
+
+  function manifestBuild(m) {
+    return Number((isNativeApp() ? m.versionCode : (m.webBuild || m.versionCode)) || 0);
   }
 
   function updateState() {
@@ -2451,6 +2550,78 @@
     }
   }
 
+  /* ---------- 网页版自动更新 ----------
+   * 与 App 无关：拿远程 version.json 里的 webBuild 跟 data.js 里的 SEED.APP_VERSION_CODE 比。
+   * 关键：刷新必须带新的查询串，否则 index.html 和 ?v=NN 的脚本会命中浏览器缓存，
+   * 用户点"刷新"仍加载旧代码，横幅会一直重复弹。
+   */
+  let webUpdateShown = false;
+
+  function webBuildCode() {
+    return Number((window.SEED && window.SEED.APP_VERSION_CODE) || 0);
+  }
+
+  function forceReload() {
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("_r", String(Date.now()));
+      window.location.replace(u.toString());
+    } catch (e) {
+      window.location.reload();
+    }
+  }
+  window.__pyqReload = forceReload;
+
+  function showUpdateBanner(remote, build) {
+    if (webUpdateShown) return;
+    webUpdateShown = true;
+    const note = (remote.webNotes && remote.webNotes[0]) || (remote.notes && remote.notes[0]) || "";
+    const banner = document.createElement("div");
+    banner.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#7A5AF8;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+    const span = document.createElement("span");
+    span.style.flex = "1";
+    span.textContent = "发现新版本 " + (remote.webName || ("build " + build)) + (note ? "：" + note : "");
+    const btn = document.createElement("button");
+    btn.textContent = "刷新到最新版";
+    btn.style.cssText = "background:#fff;color:#7A5AF8;border:none;padding:6px 12px;border-radius:16px;font-weight:600";
+    btn.onclick = forceReload;
+    const close = document.createElement("button");
+    close.textContent = "×";
+    close.setAttribute("aria-label", "关闭");
+    close.style.cssText = "background:transparent;border:none;color:rgba(255,255,255,.7);font-size:18px";
+    close.onclick = () => { banner.style.display = "none"; };
+    banner.appendChild(span);
+    banner.appendChild(btn);
+    banner.appendChild(close);
+    document.body.appendChild(banner);
+    toast("发现新版本，点顶部「刷新到最新版」即可更新");
+  }
+
+  async function checkWebUpdate() {
+    if (window.NativeApp && NativeApp.available()) return; // App 内走 APK 更新，不看网页版本
+    if (!window.fetch) return;
+    const local = webBuildCode();
+    if (!local) return;
+    if (webUpdateShown) return;
+    // 逐个拉取所有更新源，取 webBuild 最大的一份：
+    // jsDelivr 对 @main 的缓存可达数小时，只用它一个源会漏更新
+    const urls = updateManifestUrls().filter((u) => /^https?:/i.test(u) && !/\.apk(\?|$)/i.test(u));
+    let best = 0;
+    let remote = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(withCacheBust(url), { cache: "no-store" });
+        if (!res.ok) continue;
+        const m = parseManifestText(await res.text());
+        if (!m) continue;
+        // webBuild 是新字段；老清单没有时就退回 versionCode
+        const build = Number(m.webBuild || m.versionCode || 0);
+        if (build > best) { best = build; remote = m; }
+      } catch (e) { /* 单个源失败不影响其它源 */ }
+    }
+    if (remote && best > local) showUpdateBanner(remote, best);
+  }
+
   function init() {
     loadSync();
     clock();
@@ -2466,32 +2637,13 @@
     if (ui.sync.pending.length && ui.sync.auto) setTimeout(flushSync, 800);
     // 每次打开自动对齐服务端规则库（服务端每天 0 点联网更新，这里按需拉取）
     loadLiveRules(false);
-    // 网页版自动更新提示：比对远程 version.json，落后 ≥1 弹顶部提示
-    if (!(window.NativeApp && NativeApp.available()) && window.fetch) {
-      (async () => {
-        const localCode = (window.SEED && SEED.APP_VERSION_CODE) || 0;
-        const localName = (window.SEED && SEED.APP_VERSION_NAME) || "";
-        const url = (window.SEED && SEED.versionJsonUrl) || "";
-        if (!url || !localCode) return;
-        try {
-          const res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
-          if (!res.ok) return;
-          const remote = await res.json();
-          if ((remote.versionCode || 0) > localCode) {
-            const note = (remote.notes && remote.notes[0]) || "";
-            const banner = document.createElement("div");
-            banner.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99999;background:#7A5AF8;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.15);transform:translateY(0);transition:transform .2s";
-            banner.innerHTML =
-              '<span style="flex:1">发现新版本 v' + (remote.versionName || "") +
-              (note ? '：' + note : '') +
-              '</span><button style="background:#fff;color:#7A5AF8;border:none;padding:6px 12px;border-radius:16px;font-weight:600" onclick="location.reload()">刷新到最新版</button>' +
-              '<button style="background:transparent;border:none;color:rgba(255,255,255,.7);font-size:18px" aria-label="关闭" onclick="this.parentElement.style.display=\'none\'">×</button>';
-            document.body.appendChild(banner);
-            toast("发现新版本 v" + remote.versionName + "，点顶部提示刷新");
-          }
-        } catch (e) { /* 网络或 JSON 错误都静默 */ }
-      })();
-    }
+    // 网页版自动更新：启动即查一次，之后每 10 分钟 + 切回前台时再查
+    // （用 webBuild 与 SEED.APP_VERSION_CODE 比对，刷新时强制绕过缓存）
+    checkWebUpdate();
+    setInterval(checkWebUpdate, 10 * 60 * 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") checkWebUpdate();
+    });
     // 云同步：已登录云账号时启动即对齐，之后每 3 分钟拉一次
     if (window.Cloud) {
       Cloud.init();

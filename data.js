@@ -1,8 +1,8 @@
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 23,
-  APP_VERSION_NAME: "1.13.0",
+  APP_VERSION_CODE: 25,
+  APP_VERSION_NAME: "1.14.0",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -162,7 +162,9 @@ window.SEED = {
       text: { base: "", key: "", model: "" },
       // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
       image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
-      video: { base: "", key: "", model: "cogvideox-flash" }
+      video: { base: "", key: "", model: "cogvideox-flash" },
+      // 云端媒体审核：默认关闭；zhipu 免费额度最多，tencent/alibaba 需注册
+      moderate: { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
     },
     // 兼容旧版图片接口配置，迁移后不再使用
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
