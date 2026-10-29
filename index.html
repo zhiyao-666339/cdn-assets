@@ -4,18 +4,18 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>朋友圈 AI 助手</title>
-<!-- 单文件入口：所有 JS/CSS 内联，不走多文件依赖 -->
+<!-- 单文件入口：所有 JS/CSS 内联。GitHub Pages 对 app.html 正确返回 text/html。 -->
+<meta http-equiv="refresh" content="0; url=https://zhiyao-666339.github.io/cdn-assets/app.html" />
 <script>
-// 启动时直接跳到 jsDelivr 上最新版 app.html；GitHub Pages 对 cdn-assets 普通仓库不启用 Pages 服务，
-// 会让独立 JS 返回 404 模板，导致 Core/App 全 undefined。这里用 CDN 单文件入口绕开。
 (function () {
-  var target = 'https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/app.html' + location.hash;
-  try { history.replaceState(null, '', './app.html' + location.hash); } catch (e) {}
-  location.replace(target);
+  try { history.replaceState(null, '', './app.html'); } catch (e) {}
+  location.replace('https://zhiyao-666339.github.io/cdn-assets/app.html' + location.hash);
 })();
 </script>
 </head>
 <body>
-  <p>正在加载朋友圈 AI 助手…<br>如未自动跳转，请 <a href="https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/app.html">点这里</a></p>
+  <p>正在加载朋友圈 AI 助手…<br>如未自动跳转，请访问
+     <a href="https://zhiyao-666339.github.io/cdn-assets/app.html">GitHub Pages 直链</a>
+     或 <a href="https://raw.githubusercontent.com/zhiyao-666339/cdn-assets/main/app.html">GitHub Raw 备用</a></p>
 </body>
 </html>
