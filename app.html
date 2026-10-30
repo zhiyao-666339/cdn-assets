@@ -1949,8 +1949,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 25,
-  APP_VERSION_NAME: "1.14.0",
+  APP_VERSION_CODE: 26,
+  APP_VERSION_NAME: "1.14.1",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -3739,9 +3739,6 @@ window.SEED = {
     if (typeId === "book" && role) {
       extra.push("作为" + clampLine(role, 22) + "，这本书里有一句话，正好说中了我最近的状态。");
     }
-    if ((typeId === "view" || typeId === "exp") && p.name && p.identity) {
-      extra.push("我是" + p.name + "，" + clampLine(p.identity, 22) + "。");
-    }
     if ((typeId === "product" || typeId === "case") && p.product) {
       extra.push("我在做的方向是：" + clampLine(p.product, 36) + "。");
     }
@@ -4591,7 +4588,10 @@ window.SEED = {
 
     return (
       '<div class="page">' +
-        UI.head("我的资料", "填写后用于生成文案 / 选题 / 排期", "", true) +
+        UI.head("让 AI 认识你", "填得越具体，生成的文案越像你", "", true) +
+        '<div class="hint" style="margin-bottom:10px">' + icon("bulb", 14) +
+          "<span>这里是给 AI 的「认识你」档案，不是对外展示的个人简介。它只作为 AI 理解你的背景，生成时用来把握身份、处境和语气，<b>不会把里面的内容原样写进文案</b>。</span>" +
+        "</div>" +
         '<input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="App.onAvatarFile(this)" />' +
         '<div class="profile-hero">' +
           '<div class="avatar-wrap" onclick="App.pickAvatar()">' + avatarHtml() +
@@ -4609,10 +4609,10 @@ window.SEED = {
         ((u.perspectives || []).length
           ? '<div class="persp">' + u.perspectives.map((p) => "<span>" + Core.escapeHtml(p) + "</span>").join("") + "</div>"
           : "") +
-        '<div class="section-title"><h2>资料模块</h2><span>' + filled + " / 7 已填写</span></div>" +
+        '<div class="section-title"><h2>AI 需要了解你的信息</h2><span>' + filled + " / 7 已填写</span></div>" +
         '<div class="card" style="padding:2px 14px">' + rows + "</div>" +
         '<div class="hint">' + icon("shield", 14) +
-          "<span>资料按登录账号独立保存；生成文案时会参考「身份 / 产品 / 客户 / 表达风格」，素材库中你上传的内容也会参与生成。</span>" +
+          "<span>资料按登录账号独立保存，只给 AI 做背景参考：生成文案 / 选题 / 排期时会参考「身份 / 产品 / 客户 / 表达风格」，但不会把这些内容直接输出到文案里。</span>" +
         "</div>" +
       "</div>"
     );
@@ -5096,7 +5096,7 @@ window.SEED = {
     const menu = [
       ["account", "shield", "#FFF1F0", "#FA5151", "账号与安全", me ? (me.masked || "已登录") : "未登录"],
       ["member", "star", "#FFF8E6", "#D48806", "会员中心", memberStatus(mm)],
-      ["profile", "user", "#EAFBF1", "#07C160", "我的资料", store.profileSections.filter((s) => s.content).length + "/7 已填写"],
+      ["profile", "user", "#EAFBF1", "#07C160", "让 AI 认识你", "AI 背景档案 · " + store.profileSections.filter((s) => s.content).length + "/7 已填写"],
       ["history", "clock", "#EEF3FF", "#5B8FF9", "历史生成记录", store.history.length + " 条"],
       ["logs", "shield", "#FFF8E6", "#D48806", "系统日志", (store.auditLog || []).length + " 条留痕"],
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
@@ -7725,10 +7725,41 @@ window.SEED = {
     }
   }
 
-  // 组装文案生成提示词：类型结构 + 作者人设 + 文风 + 真实素材
+  // 把「让 AI 认识你」的资料整理成背景理解块。
+  // 只进提示词，不进文案：生成结果里不允许出现自我介绍或资料原文。
+  function aiPersonaBlock() {
+    const u = (store && store.user) || {};
+    const sec = (id) => {
+      const s = (store.profileSections || []).find((x) => x.id === id);
+      return s && s.content ? String(s.content) : "";
+    };
+    const clip = (v, n) => {
+      const t = String(v || "").replace(/\s+/g, " ").trim();
+      return t.length > n ? t.slice(0, n) + "…" : t;
+    };
+    const rows = [];
+    if (u.tagline) rows.push("一句话标签：" + clip(u.tagline, 30));
+    if ((u.perspectives || []).length) rows.push("身份标签：" + u.perspectives.join("、"));
+    const secs = [
+      ["who", "我是谁", 220],
+      ["product", "我的产品 / 服务", 150],
+      ["client", "我的客户 / 面向的人", 150],
+      ["style", "我的表达风格", 120],
+      ["avoid", "我不喜欢的表达", 120],
+      ["manual", "个人说明书", 80],
+      ["samples", "我真实发过的朋友圈", 260]
+    ];
+    secs.forEach(([id, label, n]) => {
+      const v = sec(id);
+      if (v) rows.push(label + "：" + clip(v, n));
+    });
+    if (!rows.length) return "";
+    return rows.join("\n");
+  }
+
+  // 组装文案生成提示词：类型结构 + 作者背景 + 文风 + 真实素材
   function aiTextPrompt(c) {
     const t = Core.typeById(c.typeId) || {};
-    const p = Core.persona ? Core.persona() : {};
     const lines = [
       "你是中文朋友圈写作助手。请写一条可以直接发到朋友圈的文案。",
       "必须做到：真实、口语化、有具体细节；不要 AI 腔、不要排比堆砌、不要书面总结；不要营销话术和夸张承诺；emoji 最多 1 个。",
@@ -7747,9 +7778,17 @@ window.SEED = {
       .map((id) => (store.materials.copy.find((m) => m.id === id) || {}).text)
       .filter(Boolean);
     if (mats.length) lines.push("可参考的真实素材：" + mats.join(" / "));
-    if (p.identity) lines.push("作者身份：" + p.identity);
-    if (p.style) lines.push("作者平时的表达风格：" + String(p.style).slice(0, 200));
-    if (p.avoid) lines.push("作者不喜欢的表达：" + String(p.avoid).slice(0, 200));
+    // 资料只作为「理解作者」的背景，明确禁止复述，避免把个人简介整段写进文案
+    const profile = aiPersonaBlock();
+    if (profile) {
+      lines.push("【关于作者：只用来理解这个人，禁止直接写进文案】");
+      lines.push(profile);
+      lines.push(
+        "使用规则：用上面的资料判断作者的身份、处境、立场和语气，让文案像这个人自己写的；" +
+        "不要自我介绍、不要复述或罗列资料内容、不要出现「我是……」「作为一名……」这类自我介绍句式，" +
+        "也不要照抄资料里的标签词；真实朋友圈样本只用来学习语气和句式，不许照抄原句。"
+      );
+    }
     lines.push("直接输出文案正文，不要标题、不要引号、不要解释。");
     return lines.join("\n");
   }
@@ -8631,16 +8670,15 @@ window.SEED = {
     else toast("请点击「上传视频」重新选择");
   }
 
-
   /* ---------- 个人资料（按登录账号保存） ---------- */
   const SEC_HINT = {
-    who: "例：我是谁、做什么的、在哪个城市、有什么身份标签",
+    who: "例：我是谁、做什么的、在哪个城市、有什么身份标签（只给 AI 理解你，不会写进文案）",
     client: "例：我的客户是谁、他们的痛点与需求",
     product: "例：我的产品/服务名称、价格、能解决什么问题",
     style: "例：说话直接、口语化、接地气、有真实情感",
     avoid: "例：不要太硬广、不要有 AI 味、不要端着说教",
-    samples: "粘贴 2-4 条你真实发过的朋友圈，生成时会模仿语气",
-    manual: "一句话介绍自己，会作为个人说明书"
+    samples: "粘贴 2-4 条你真实发过的朋友圈，AI 会模仿语气，但不会照抄",
+    manual: "一句话介绍自己，会作为 AI 理解你的个人说明书"
   };
 
   function editSection(id) {
@@ -8649,7 +8687,7 @@ window.SEED = {
     openSheet(
       "<h3>" + s.title + "</h3>" +
       '<div class="field"><textarea class="textarea" id="secInput" rows="9" placeholder="' + escapeHtml(SEC_HINT[id] || "") + '">' + escapeHtml(s.content) + "</textarea></div>" +
-      '<div class="muted" style="margin-bottom:10px">仅保存在当前账号，生成文案 / 选题 / 排期时会参考</div>' +
+      '<div class="muted" style="margin-bottom:10px">这是给 AI 的「认识你」档案：只作背景理解，不会原样出现在文案里</div>' +
       '<div class="sheet-actions"><button class="btn ghost" onclick="App.closeSheet()">取消</button>' +
       '<button class="btn primary" onclick="App.saveSection(\'' + id + '\')">保存</button></div>'
     );

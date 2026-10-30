@@ -1,22 +1,20 @@
 {
   "schema": 2,
-  "versionCode": 25,
-  "versionName": "1.14.0",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.0.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.0.apk",
-  "size": 2616296,
-  "md5": "d2a5fd051b43871e8a97011bf7f9ae21",
+  "versionCode": 26,
+  "versionName": "1.14.1",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.1.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.1.apk",
+  "size": 2617436,
+  "md5": "87a6dce81a78a51d67c793922b6916de",
   "notes": [
-    "新增：云端媒体深度审核（我的 → AI 模型接入 → 云端媒体审核）",
-    "App 原生：智谱视觉（免费）、腾讯云 IM（TC3-HMAC-SHA256）、阿里云绿网（HMAC-SHA1），密钥存 SharedPreferences",
-    "网页版：云端审核走用户自建代理，签名密钥不进浏览器",
-    "修复：App 检查更新只认 APK 真实版号，不再与网页构建号混淆"
+    "「我的资料」升级为「让 AI 认识你」：资料只作为 AI 的背景理解，不再原样出现在生成的文案里",
+    "生成提示词注入身份 / 产品 / 客户 / 表达风格 / 样本，并明确禁止自我介绍和复述资料",
+    "移除本地模板里的自我介绍句式，文案更像本人随手写的"
   ],
-  "webBuild": 25,
-  "webName": "1.14.0",
+  "webBuild": 26,
+  "webName": "1.14.1",
   "webNotes": [
-    "新增：云端媒体深度审核（我的 → AI 模型接入 → 云端媒体审核）",
-    "修复：网页版检查更新地址缺失、资源缓存导致刷新后仍是旧代码",
-    "修复：App 检查更新只认真实 APK 版号，避免与网页构建号混淆"
+    "「我的资料」升级为「让 AI 认识你」：只让 AI 理解你，不会把资料原样写进文案",
+    "文案生成更贴合你的身份、表达风格和真实样本"
   ]
 }

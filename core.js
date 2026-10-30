@@ -1290,9 +1290,6 @@
     if (typeId === "book" && role) {
       extra.push("作为" + clampLine(role, 22) + "，这本书里有一句话，正好说中了我最近的状态。");
     }
-    if ((typeId === "view" || typeId === "exp") && p.name && p.identity) {
-      extra.push("我是" + p.name + "，" + clampLine(p.identity, 22) + "。");
-    }
     if ((typeId === "product" || typeId === "case") && p.product) {
       extra.push("我在做的方向是：" + clampLine(p.product, 36) + "。");
     }

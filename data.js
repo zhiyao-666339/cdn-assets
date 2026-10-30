@@ -1,8 +1,8 @@
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 25,
-  APP_VERSION_NAME: "1.14.0",
+  APP_VERSION_CODE: 26,
+  APP_VERSION_NAME: "1.14.1",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */

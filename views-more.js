@@ -123,7 +123,10 @@
 
     return (
       '<div class="page">' +
-        UI.head("我的资料", "填写后用于生成文案 / 选题 / 排期", "", true) +
+        UI.head("让 AI 认识你", "填得越具体，生成的文案越像你", "", true) +
+        '<div class="hint" style="margin-bottom:10px">' + icon("bulb", 14) +
+          "<span>这里是给 AI 的「认识你」档案，不是对外展示的个人简介。它只作为 AI 理解你的背景，生成时用来把握身份、处境和语气，<b>不会把里面的内容原样写进文案</b>。</span>" +
+        "</div>" +
         '<input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="App.onAvatarFile(this)" />' +
         '<div class="profile-hero">' +
           '<div class="avatar-wrap" onclick="App.pickAvatar()">' + avatarHtml() +
@@ -141,10 +144,10 @@
         ((u.perspectives || []).length
           ? '<div class="persp">' + u.perspectives.map((p) => "<span>" + Core.escapeHtml(p) + "</span>").join("") + "</div>"
           : "") +
-        '<div class="section-title"><h2>资料模块</h2><span>' + filled + " / 7 已填写</span></div>" +
+        '<div class="section-title"><h2>AI 需要了解你的信息</h2><span>' + filled + " / 7 已填写</span></div>" +
         '<div class="card" style="padding:2px 14px">' + rows + "</div>" +
         '<div class="hint">' + icon("shield", 14) +
-          "<span>资料按登录账号独立保存；生成文案时会参考「身份 / 产品 / 客户 / 表达风格」，素材库中你上传的内容也会参与生成。</span>" +
+          "<span>资料按登录账号独立保存，只给 AI 做背景参考：生成文案 / 选题 / 排期时会参考「身份 / 产品 / 客户 / 表达风格」，但不会把这些内容直接输出到文案里。</span>" +
         "</div>" +
       "</div>"
     );
@@ -628,7 +631,7 @@
     const menu = [
       ["account", "shield", "#FFF1F0", "#FA5151", "账号与安全", me ? (me.masked || "已登录") : "未登录"],
       ["member", "star", "#FFF8E6", "#D48806", "会员中心", memberStatus(mm)],
-      ["profile", "user", "#EAFBF1", "#07C160", "我的资料", store.profileSections.filter((s) => s.content).length + "/7 已填写"],
+      ["profile", "user", "#EAFBF1", "#07C160", "让 AI 认识你", "AI 背景档案 · " + store.profileSections.filter((s) => s.content).length + "/7 已填写"],
       ["history", "clock", "#EEF3FF", "#5B8FF9", "历史生成记录", store.history.length + " 条"],
       ["logs", "shield", "#FFF8E6", "#D48806", "系统日志", (store.auditLog || []).length + " 条留痕"],
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
