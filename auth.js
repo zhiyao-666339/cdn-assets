@@ -9,6 +9,8 @@
   const isNative = !!(B && typeof B.isNative === "function");
   const DAY = 24 * 60 * 60 * 1000;
   const WX_ID = "zhiyao0a1";
+  // 开发者密码：与对外公开的微信号分开，避免用户自行生成激活码
+  const DEV_PWD = "PYQ-DEV-2026";
 
   const TIERS = [
     { tier: 1, name: "月会员", price: 9.9, days: 30, tag: "灵活体验" },
@@ -355,7 +357,7 @@
     phone = normPhone(phone);
     if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
     if (isNative) return call("authGenCode", [phone, tier, pwd]);
-    if (pwd !== WX_ID) return { ok: false, error: "开发者密码错误" };
+    if (pwd !== DEV_PWD) return { ok: false, error: "开发者密码错误" };
     return { ok: true, code: genCode(phone, tier), tierName: (TIERS.find((t) => t.tier === tier) || {}).name };
   }
 
@@ -657,6 +659,10 @@
 
   function vipViewChange(v) {
     if (v === "close") { closeVip(); return; }
+    // 已开通/试用中的用户是从会员中心主动进来的，不是被锁：必须能关掉弹层
+    if (v === "code" || v === "contact" || v === "pay") {
+      if (memberActive(currentMember())) vipLocked = false;
+    }
     vipView = v;
     renderVip();
   }
@@ -751,7 +757,7 @@
       inner =
         '<div class="vip-card">' +
           (vipLocked ? "" : '<button class="pay-back close" onclick="Auth.closeVip()">✕</button>') +
-          '<div class="vip-crown">VIP</div>' +
+          '<div class="vip-crown" onclick="Auth.devTap()">VIP</div>' +
           '<h2 class="vip-title">' + (expired ? "免费试用已结束" : "会员中心") + "</h2>" +
           '<div class="vip-desc">' + (expired ? "开通会员后即可继续使用全部功能" : "选择适合你的会员档位") + "</div>" +
           '<div class="vip-status' + (expired ? " off" : "") + '">' + statusText(m) + "</div>" +
@@ -834,9 +840,23 @@
   }
 
   function openDevTool() {
-    vipLocked = false;
+    vipLocked = !memberActive(currentMember());
     vipView = "dev";
     renderVip();
+  }
+
+  // 隐藏入口：3 秒内连点会员中心顶部 VIP 徽章 5 次才会打开开发者工具
+  let devTaps = 0;
+  let devTapTimer = null;
+  function devTap() {
+    devTaps += 1;
+    clearTimeout(devTapTimer);
+    devTapTimer = setTimeout(() => { devTaps = 0; }, 3000);
+    if (devTaps >= 5) {
+      devTaps = 0;
+      clearTimeout(devTapTimer);
+      openDevTool();
+    }
   }
 
   /* ---------------- 启动校验 ---------------- */
@@ -881,7 +901,7 @@
     sendCode, verifyCode, purchase, activate, genDevCode,
     gate, show, setMode, submit, pwdInput, sendSmsCode, strength,
     showLock, hideVip, showPay, vipView: vipViewChange, selectTier, paySelected,
-    closeVip, copyWx, submitActivate, devGenTap, openDevTool, logoutTap,
+    closeVip, copyWx, submitActivate, devGenTap, openDevTool, devTap, logoutTap,
     bindBack,
     tiers: TIERS,
     wxId: WX_ID,

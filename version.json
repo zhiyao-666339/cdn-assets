@@ -1,20 +1,20 @@
 {
   "schema": 2,
-  "versionCode": 26,
-  "versionName": "1.14.1",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.1.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.1.apk",
-  "size": 2617436,
-  "md5": "87a6dce81a78a51d67c793922b6916de",
+  "versionCode": 27,
+  "versionName": "1.14.2",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.2.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.2.apk",
+  "size": 2617700,
+  "md5": "730a04a6d21a107c67e4e2db060094c8",
   "notes": [
-    "「我的资料」升级为「让 AI 认识你」：资料只作为 AI 的背景理解，不再原样出现在生成的文案里",
-    "生成提示词注入身份 / 产品 / 客户 / 表达风格 / 样本，并明确禁止自我介绍和复述资料",
-    "移除本地模板里的自我介绍句式，文案更像本人随手写的"
+    "修复：已开通会员从会员中心点「已有激活码」，弹层无法关闭、返回后卡在档位页",
+    "收紧开发者工具：会员中心不再显示入口，改为连点 VIP 徽章 5 次进入；激活码生成密码改为独立密码，不再使用公开微信号",
+    "激活码仍与手机号 + 档位绑定，输入后立即开通并写入本机"
   ],
-  "webBuild": 26,
-  "webName": "1.14.1",
+  "webBuild": 27,
+  "webName": "1.14.2",
   "webNotes": [
-    "「我的资料」升级为「让 AI 认识你」：只让 AI 理解你，不会把资料原样写进文案",
-    "文案生成更贴合你的身份、表达风格和真实样本"
+    "修复：已开通会员进入激活码页后弹层关不掉的问题",
+    "收紧：开发者激活码生成入口改为隐藏手势，密码与公开微信号分离"
   ]
 }

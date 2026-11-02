@@ -700,7 +700,7 @@
       '<div class="page">' +
         UI.head("会员中心", "免费试用 7 天 · 4 档会员", "", true) +
         '<div class="m-hero' + (active ? "" : " off") + '">' +
-          '<div class="m-hero-top"><span class="m-crown">VIP</span><span class="m-badge">' + badge + "</span></div>" +
+          '<div class="m-hero-top"><span class="m-crown" onclick="Auth.devTap()">VIP</span><span class="m-badge">' + badge + "</span></div>" +
           '<div class="m-hero-name">' + (m && m.tier >= 1 && m.tier !== 0 ? m.tierName : (m && m.trialEndsAt > Date.now() ? "免费试用中" : "会员未开通")) + "</div>" +
           '<div class="m-hero-desc">' + expireLine + "</div>" +
         "</div>" +
@@ -713,7 +713,6 @@
         '<div class="hint" style="margin-top:14px">' + icon("shield", 13) +
           "<span>免费试用从首次注册登录开始计算 7 天；付费会员从付费日计算，到期需续费才能继续使用。</span>" +
         "</div>" +
-        '<div class="dev-entry" onclick="Auth.openDevTool()">开发者激活码生成</div>' +
       "</div>"
     );
   }
