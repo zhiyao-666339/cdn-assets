@@ -1,20 +1,25 @@
 {
   "schema": 2,
-  "versionCode": 28,
-  "versionName": "1.14.3",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.3.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.3.apk",
-  "size": 2618760,
-  "md5": "c9afb3966ad2ad0856117acabb3d2dd7",
+  "versionCode": 29,
+  "versionName": "1.14.4",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.4.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.4.apk",
+  "size": 2738929,
+  "md5": "dbd22316674d7735ec582c4aab0921ed",
   "notes": [
-    "AI 接入改为「自建后端代理」：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥",
-    "文案 / 视频 / 图片生成统一走代理，前端只填代理地址与可选访问令牌",
-    "云端内容审核同样支持走该代理的 /moderate 接口"
+    "账号与资料并入自建后端 pyq-server：手机号/邮箱 + 密码登录，资料、文案、素材、历史、生成记录整包存云服务器",
+    "退出登录或换设备后，登录同一账号即可自动恢复全部资料",
+    "服务器每天 0 点自动学习你的资料与已上传文案，生成「人物画像摘要 + 写作风格规则」",
+    "AI 生成文案时优先使用画像摘要；资料里没写到的事实一律不许编造",
+    "服务器每日把用户数据备份到飞书云盘（配置飞书应用后自动执行）",
+    "AI 模型全部走自建后端，App 端不再需要填写任何模型厂商 Key"
   ],
-  "webBuild": 28,
-  "webName": "1.14.3",
+  "webBuild": 29,
+  "webName": "1.14.4",
   "webNotes": [
-    "AI 接入改为「自建后端代理」，网页版填写代理地址即可使用，不再需要在前端保存 API Key",
-    "代理地址同时用于云端审核，密钥不出服务器"
+    "「账号与云同步」改为自建服务器：填入服务器地址 + 手机号/邮箱 + 密码即可登录，换设备自动恢复全部资料",
+    "新增「人物画像」：服务器每天 0 点学习资料与文案，也可一键立即学习",
+    "AI 文案生成强制走自建后端并注入人物画像，杜绝编造资料外的内容",
+    "服务器地址与 AI 代理地址共用，登录云账号后自动携带身份令牌"
   ]
 }

@@ -156,7 +156,7 @@
     c.replaced = false;
     render();
     const cfg = aiCfg().text;
-    if (cfg.base && cfg.key) {
+    if (aiBaseOf(cfg)) {
       toast("AI 正在生成文案…");
       const r = await aiChat([
         { role: "system", content: "你是一位真实的中文朋友圈写作者，擅长写有人味、不营销的日常文案。" },
@@ -179,13 +179,15 @@
     c.loading = true;
     render();
     const cfg = aiCfg().text;
-    if (cfg.base && cfg.key) {
+    if (aiBaseOf(cfg)) {
       toast("AI 正在润色…");
+      const digest = String((store && store.personaDigest) || "").trim();
       const r = await aiChat([
         { role: "system", content: "你是中文朋友圈润色助手，只调整语气、结构和营销感，不改原意。" },
         { role: "user", content: "请润色下面这条朋友圈，保持原意，去掉 AI 腔和营销感，篇幅：" +
           (c.size === "long" ? "长文 300 字以上" : "短文 " + Core.SHORT_MAX + " 字以内") +
           (c.styles.length ? "；文风：" + c.styles.map((s) => STYLE_HINT[s] || s).join("；") : "") +
+          (digest ? "；只学习下面的语气和句式，不要新增任何事实：\n" + digest : "") +
           "\n\n原文：\n" + c.text + "\n\n直接输出润色后的正文。" }
       ]);
       if (r && r.ok && r.text) {
@@ -806,10 +808,8 @@
   // 免费 / 常用预设：一键填入接口地址与模型
   const AI_PRESETS = {
     text: [
-      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "glm-4-flash", backend: true },
-      { id: "zhipu", name: "智谱 GLM（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
-      { id: "siliconflow", name: "硅基流动（送额度）", base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" },
-      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+      { id: "backend", name: "自建服务器（推荐）", base: "", model: "glm-4-flash", backend: true },
+      { id: "custom", name: "自定义服务器地址", base: "", model: "glm-4-flash", backend: true }
     ],
     image: [
       { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
@@ -817,9 +817,8 @@
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
-      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "cogvideox-flash", backend: true },
-      { id: "zhipu", name: "智谱 CogVideoX（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogvideox-flash" },
-      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+      { id: "backend", name: "自建服务器（推荐）", base: "", model: "cogvideox-flash", backend: true },
+      { id: "custom", name: "自定义服务器地址", base: "", model: "cogvideox-flash", backend: true }
     ]
   };
 
@@ -827,23 +826,44 @@
     if (!store.settings) store.settings = {};
     if (!store.settings.ai) store.settings.ai = {};
     const ai = store.settings.ai;
-    if (!ai.text) ai.text = { backend: false, base: "", key: "", model: "" };
+    if (!ai.text) ai.text = { backend: true, base: "", key: "", model: "glm-4-flash" };
     if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
-    if (!ai.video) ai.video = { backend: false, base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.video) ai.video = { backend: true, base: "", key: "", model: "cogvideox-flash" };
     if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
     if (!ai.image.mode) ai.image.mode = "free";
+    // AI 统一走自建后端：文案与视频强制 backend，不再提供直连 Key 模式
+    ai.text.backend = true;
+    ai.video.backend = true;
     // 旧版「内置模型」迁移为「自建后端代理」
     if (ai.text.builtin) {
-      ai.text.backend = true;
       ai.text.base = ai.text.base || ai.text.proxyUrl || "";
       ai.text.builtin = false;
     }
     if (ai.video.builtin) {
-      ai.video.backend = true;
       ai.video.base = ai.video.base || ai.video.proxyUrl || "";
       ai.video.builtin = false;
     }
     return ai;
+  }
+
+  // 自建服务器地址：账号同步与 AI 代理共用同一个地址
+  function aiServerBase() {
+    const c = (store.settings && store.settings.cloud) || {};
+    return String(c.server || "").trim().replace(/\/+$/, "");
+  }
+
+  // 后端模式且没单独填地址时，自动使用云同步里配置的服务器
+  function aiBaseOf(c) {
+    const base = String((c && c.base) || "").trim();
+    if (base) return base.replace(/\/+$/, "");
+    return c && c.backend ? aiServerBase() : "";
+  }
+
+  // 后端模式：优先用用户填的代理令牌，其次用已登录云账号的 token
+  function aiAuthOf(c) {
+    if (c.key) return c.key;
+    if (c.backend && window.Cloud && Cloud.token) return Cloud.token();
+    return "";
   }
 
   // 图片配置（兼容旧字段）
@@ -865,16 +885,18 @@
   async function aiChat(messages) {
     const c = aiCfg().text;
     const model = c.model || "glm-4-flash";
-    if (!c.base) return { ok: false, error: c.backend ? "未配置后端代理地址" : "未配置文案模型" };
-    if (!c.backend && !c.key) return { ok: false, error: "未配置 API Key" };
+    const base = aiBaseOf(c);
+    const auth = aiAuthOf(c);
+    if (!base) return { ok: false, error: "未配置自建后端地址（到「云同步」或「AI 模型接入」填写）" };
+    if (!c.backend && !auth) return { ok: false, error: "未配置 API Key" };
     const body = { model: model, messages: messages, temperature: 0.8, stream: false };
     if (window.NativeApp && NativeApp.available() && NativeApp.aiChat) {
-      return NativeApp.aiChat(c.base, c.key, model, JSON.stringify(messages));
+      return NativeApp.aiChat(base, auth, model, JSON.stringify(messages));
     }
     try {
-      const url = c.base.replace(/\/+$/, "") + "/chat/completions";
+      const url = base + "/chat/completions";
       const headers = { "Content-Type": "application/json" };
-      if (c.key) headers["Authorization"] = "Bearer " + c.key;
+      if (auth) headers["Authorization"] = "Bearer " + auth;
       if (c.backend && c.key) headers["X-Pyq-Token"] = c.key;
       const res = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) });
       const txt = await res.text();
@@ -943,6 +965,16 @@
       .map((id) => (store.materials.copy.find((m) => m.id === id) || {}).text)
       .filter(Boolean);
     if (mats.length) lines.push("可参考的真实素材：" + mats.join(" / "));
+    // 服务器每日 0 点学习生成的人物画像：优先级最高，事实与风格都以此为准
+    const digest = String((store && store.personaDigest) || "").trim();
+    if (digest) {
+      lines.push("【人物画像摘要 · 服务器每日学习生成，最高优先级】");
+      lines.push(digest);
+      lines.push(
+        "硬性规则：只能使用上面「事实清单」里明确出现的事实；清单没提到的职业经历、客户案例、数据、地点、时间、" +
+        "他人评价、收入、承诺，一律不许编造。信息不足时写得概括、克制，宁可少写也不虚构。风格按「写作风格」写，不要复述摘要本身。"
+      );
+    }
     // 资料只作为「理解作者」的背景，明确禁止复述，避免把个人简介整段写进文案
     const profile = aiPersonaBlock();
     if (profile) {
@@ -1011,21 +1043,21 @@
 
   function aiSaveSettings() {
     const ai = aiCfg();
-    const tBackend = document.getElementById("aiTextBackend");
-    const vBackend = document.getElementById("aiVideoBackend");
-    ai.text.backend = !!(tBackend && tBackend.checked);
-    ai.text.base = document.getElementById("aiTextBase").value.trim();
-    ai.text.key = document.getElementById("aiTextKey").value.trim();
-    ai.text.model = document.getElementById("aiTextModel").value.trim();
-    ai.image.mode = document.getElementById("aiImageMode").value;
-    ai.image.base = document.getElementById("aiImageBase").value.trim();
-    ai.image.key = document.getElementById("aiImageKey").value.trim();
-    ai.image.model = document.getElementById("aiImageModel").value.trim();
-    ai.image.size = document.getElementById("aiImageSize").value;
-    ai.video.backend = !!(vBackend && vBackend.checked);
-    ai.video.base = document.getElementById("aiVideoBase").value.trim();
-    ai.video.key = document.getElementById("aiVideoKey").value.trim();
-    ai.video.model = document.getElementById("aiVideoModel").value.trim();
+    const el = (id) => document.getElementById(id);
+    const val = (id) => { const x = el(id); return x ? x.value.trim() : ""; };
+    ai.text.backend = true;
+    ai.text.base = val("aiTextBase");
+    ai.text.key = val("aiTextKey");
+    ai.text.model = val("aiTextModel");
+    ai.image.mode = el("aiImageMode").value;
+    ai.image.base = val("aiImageBase");
+    ai.image.key = val("aiImageKey");
+    ai.image.model = val("aiImageModel");
+    ai.image.size = el("aiImageSize").value;
+    ai.video.backend = true;
+    ai.video.base = val("aiVideoBase");
+    ai.video.key = val("aiVideoKey");
+    ai.video.model = val("aiVideoModel");
     // 云端审核
     const modOn = document.getElementById("aiModerateEnabled");
     const modProv = document.getElementById("aiModerateProvider");
@@ -1051,16 +1083,15 @@
   async function aiTest(kind) {
     const ai = aiCfg();
     if (kind === "text") {
-      ai.text.base = document.getElementById("aiTextBase").value.trim();
-      ai.text.key = document.getElementById("aiTextKey").value.trim();
-      ai.text.model = document.getElementById("aiTextModel").value.trim();
-      ai.text.backend = !!(document.getElementById("aiTextBackend") || {}).checked;
+      ai.text.base = (document.getElementById("aiTextBase") || {}).value ? document.getElementById("aiTextBase").value.trim() : "";
+      ai.text.key = (document.getElementById("aiTextKey") || {}).value ? document.getElementById("aiTextKey").value.trim() : "";
+      ai.text.model = (document.getElementById("aiTextModel") || {}).value ? document.getElementById("aiTextModel").value.trim() : "";
+      ai.text.backend = true;
       save();
-      if (!ai.text.base) { toast(ai.text.backend ? "先填后端代理地址" : "先填接口地址"); return; }
-      if (!ai.text.backend && !ai.text.key) { toast("先填 API Key"); return; }
-      toast("正在测试" + (ai.text.backend ? "后端代理" : "文案模型") + "…");
+      if (!aiBaseOf(ai.text)) { toast("先填自建服务器地址"); return; }
+      toast("正在测试自建后端…");
       const r = await aiChat([{ role: "user", content: "只回复两个字：你好" }]);
-      toast(r && r.ok ? "文案模型连接成功：" + String(r.text || "").slice(0, 20) : "文案模型失败：" + ((r && r.error) || ""));
+      toast(r && r.ok ? "后端模型连接成功：" + String(r.text || "").slice(0, 20) : "后端模型失败：" + ((r && r.error) || ""));
       return;
     }
     if (kind === "image") {
@@ -2051,7 +2082,7 @@
     aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
-    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,
+    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
       return v ? (v.url || videoPreviewUrls[id] || "") : "";
@@ -2511,22 +2542,22 @@
     if (ui.page === "update") render();
   }
 
-  /* ---------- 云端同步（Supabase）：账号 + 数据 ---------- */
+  /* ---------- 账号与云同步（自建 pyq-server）：账号 + 数据 ---------- */
   function cloudCfgInputs() {
     const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
-    return { url: get("clUrl"), key: get("clKey"), account: get("clAccount"), pwd: get("clPwd") };
+    return { server: get("clServer"), account: get("clAccount"), pwd: get("clPwd") };
   }
 
   function saveCloudCfg() {
     const v = cloudCfgInputs();
     if (!store.settings) store.settings = {};
-    if (!store.settings.cloud) store.settings.cloud = { url: "", key: "", account: "", auto: true };
-    if (!v.url || !v.key) { toast("请先填写 Supabase 地址和 anon key"); return; }
-    store.settings.cloud.url = v.url;
-    store.settings.cloud.key = v.key;
+    if (!store.settings.cloud) store.settings.cloud = { mode: "pyq", server: "", account: "", auto: true };
+    if (!v.server) { toast("请先填写自建服务器地址"); return; }
+    store.settings.cloud.mode = "pyq";
+    store.settings.cloud.server = v.server.replace(/\/+$/, "");
     if (v.account) store.settings.cloud.account = v.account;
     save();
-    toast("云端配置已保存");
+    toast("服务器地址已保存");
     Cloud.init();
     render();
   }
@@ -2534,28 +2565,41 @@
   async function cloudAuth(mode) {
     const v = cloudCfgInputs();
     if (!window.Cloud) { toast("云同步模块未加载"); return; }
-    if (!Cloud.configured() && (!v.url || !v.key)) { toast("请先填写 Supabase 地址和 anon key，并点「保存配置」"); return; }
-    if (v.url && v.key) {
-      store.settings.cloud.url = v.url;
-      store.settings.cloud.key = v.key;
-    }
+    if (!v.server) { toast("请填写自建服务器地址"); return; }
+    store.settings.cloud.mode = "pyq";
+    store.settings.cloud.server = v.server.replace(/\/+$/, "");
     if (!v.account) { toast("请填写手机号或邮箱"); return; }
     if (!v.pwd) { toast("请填写密码"); return; }
     store.settings.cloud.account = v.account;
     save();
     toast(mode === "up" ? "正在注册…" : "正在登录…");
-    const r = await (mode === "up" ? Cloud.signUp(v.account, v.pwd) : Cloud.signIn(v.account, v.pwd));
+    let r;
+    if (mode === "up") {
+      r = await Cloud.signUp(v.account, v.pwd, (store.user && store.user.name) || "");
+    } else {
+      r = await Cloud.signIn(v.account, v.pwd);
+    }
     if (!r || !r.ok) { toast(r.error || "操作失败"); render(); return; }
     Core.logAudit("account", mode === "up" ? "signup" : "login", v.account, mode === "up" ? "注册云账号" : "登录云账号");
     const rr = await Cloud.reconcile(false);
     render(true);
-    toast(rr && rr.direction === "down" ? "已登录，内容已从云端恢复" : "已登录，本地内容已上传");
+    toast(rr && rr.direction === "down" ? "已登录，资料与记录已从云端恢复" : "已登录，本地资料已上传到云端");
+  }
+
+  async function buildPersonaNow() {
+    if (!window.Cloud || !Cloud.hasSession()) { toast("请先登录云账号"); return; }
+    toast("正在学习你的资料和文案…");
+    const r = await Cloud.buildPersona(true);
+    if (!r || !r.ok) { toast((r && r.error) || "学习失败"); return; }
+    if (r.skipped) { toast(r.reason || "资料没有变化"); return; }
+    render(true);
+    toast("人物画像已更新，生成文案会优先使用它");
   }
 
   async function cloudSignOut() {
     if (!window.Cloud) return;
     await Cloud.signOut();
-    toast("已退出云账号（本地内容保留）");
+    toast("已退出账号（资料已保存在云端，重新登录即可恢复）");
     render();
   }
 

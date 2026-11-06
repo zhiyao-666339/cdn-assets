@@ -1,8 +1,8 @@
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 28,
-  APP_VERSION_NAME: "1.14.3",
+  APP_VERSION_CODE: 29,
+  APP_VERSION_NAME: "1.14.4",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -155,15 +155,14 @@ window.SEED = {
     videos: []
   },
 
-  // 生成设置：AI 模型（文案/图片/视频）、永久更新源、云端同步（Supabase）
+  // 生成设置：AI 模型（文案/图片/视频）、永久更新源、账号与云同步
   settings: {
-    // AI 模型：统一走 OpenAI 兼容协议，Key 只存本机，不上传任何服务器
+    // AI 全部走自建后端（pyq-server）：模型密钥只在服务器，前端不保存
     ai: {
-      // backend: true 时走自建代理，base 填代理地址，key 填代理访问令牌（可空），前端不接触真实模型 Key
-      text: { backend: false, base: "", key: "", model: "" },
+      text: { backend: true, base: "", key: "", model: "glm-4-flash" },
       // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
       image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
-      video: { backend: false, base: "", key: "", model: "cogvideox-flash" },
+      video: { backend: true, base: "", key: "", model: "cogvideox-flash" },
       // 云端媒体审核：默认关闭；zhipu 免费额度最多，tencent/alibaba 需注册
       moderate: { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
     },
@@ -171,6 +170,9 @@ window.SEED = {
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
     updateUrl: "",
     cloud: {
+      // pyq=自建服务器（默认）；supabase=旧版兼容
+      mode: "pyq",
+      server: "",
       url: "https://cvhbpiggofkpsynyplss.supabase.co",
       key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aGJwaWdnb2ZrcHN5bnlwbHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTk1NjksImV4cCI6MjEwODY3NTU2OX0.MQQT6To8tmYskadlPinZE_vExsQJf4n18dBrg6CA9NU",
       account: "",

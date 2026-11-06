@@ -126,10 +126,12 @@
           }
           if (typeof s.settings.updateUrl !== "string") s.settings.updateUrl = "";
           if (!s.settings.cloud || typeof s.settings.cloud !== "object") {
-            s.settings.cloud = { url: "", key: "", account: "", auto: true };
+            s.settings.cloud = { mode: "pyq", server: "", url: "", key: "", account: "", auto: true };
           }
           // 老用户升级：自动补上内置云端地址与 key（用户自己填过的不覆盖）
           const seedCloud = (window.SEED && SEED.settings && SEED.settings.cloud) || {};
+          if (!s.settings.cloud.mode) s.settings.cloud.mode = "pyq";
+          if (typeof s.settings.cloud.server !== "string") s.settings.cloud.server = "";
           if (!s.settings.cloud.url && seedCloud.url) s.settings.cloud.url = seedCloud.url;
           if (!s.settings.cloud.key && seedCloud.key) s.settings.cloud.key = seedCloud.key;
           if (typeof s.settings.cloud.auto !== "boolean") s.settings.cloud.auto = true;

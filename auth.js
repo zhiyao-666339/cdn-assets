@@ -164,17 +164,17 @@
     let r;
     try { r = await Cloud.signIn(phone, password); } catch (e) { return null; }
     if (!r || !r.ok) return null;
-    Cloud.init().then(() => {
-      if (window.App && App.render) App.render(true);
-    }).catch(() => {});
-    return { name: "用户" + phone.slice(-4) };
+    // 先拉取云端资料再返回，保证换设备登录时资料已经恢复
+    try { await Cloud.init(); } catch (e) {}
+    if (window.App && App.render) App.render(true);
+    return { name: (r.user && r.user.name) || ("用户" + phone.slice(-4)) };
   }
 
   // 注册时同步创建云端账号，让其他版本可以用同一账号登录
   async function cloudSignUpQuiet(phone, nickname, password) {
     if (!cloudReady() || Cloud.hasSession()) return;
     try {
-      const r = await Cloud.signUp(phone, password);
+      const r = await Cloud.signUp(phone, password, nickname);
       if (r && r.ok) await Cloud.push(true);
     } catch (e) {}
   }
@@ -222,7 +222,7 @@
     if (e) return { ok: false, error: e };
     if (isNative) {
       const r = await call("authRegister", [phone, nickname, password]);
-      if (r && r.ok) cloudSignUpQuiet(phone, nickname, password);
+      if (r && r.ok) await cloudSignUpQuiet(phone, nickname, password);
       return r;
     }
 
@@ -231,7 +231,7 @@
     acc[phone] = { name: nickname, hash: fakeSha(password), trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
     fakeSave(acc);
     localStorage.setItem(FAKE_SESSION, phone);
-    cloudSignUpQuiet(phone, nickname, password);
+    await cloudSignUpQuiet(phone, nickname, password);
     return { ok: true, me: fakeMe(phone, acc[phone]), msg: "注册成功，免费试用 7 天已开启" };
   }
 
@@ -264,9 +264,16 @@
   }
 
   async function logout() {
+    // 退出前先确认云端已保存：资料跟随账号，退出登录 / 换设备都不会丢
+    try {
+      if (window.Cloud && Cloud.hasSession()) {
+        if (Cloud.state && Cloud.state().error) await Cloud.push(true);
+        await Cloud.signOut();
+      }
+    } catch (e) {}
     if (isNative) return call("authLogout", []);
     localStorage.removeItem(FAKE_SESSION);
-    return { ok: true };
+    return { ok: true, msg: "已退出，资料已保存在云端" };
   }
 
   async function member() {

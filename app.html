@@ -1949,8 +1949,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 28,
-  APP_VERSION_NAME: "1.14.3",
+  APP_VERSION_CODE: 29,
+  APP_VERSION_NAME: "1.14.4",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -2103,15 +2103,14 @@ window.SEED = {
     videos: []
   },
 
-  // 生成设置：AI 模型（文案/图片/视频）、永久更新源、云端同步（Supabase）
+  // 生成设置：AI 模型（文案/图片/视频）、永久更新源、账号与云同步
   settings: {
-    // AI 模型：统一走 OpenAI 兼容协议，Key 只存本机，不上传任何服务器
+    // AI 全部走自建后端（pyq-server）：模型密钥只在服务器，前端不保存
     ai: {
-      // backend: true 时走自建代理，base 填代理地址，key 填代理访问令牌（可空），前端不接触真实模型 Key
-      text: { backend: false, base: "", key: "", model: "" },
+      text: { backend: true, base: "", key: "", model: "glm-4-flash" },
       // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
       image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
-      video: { backend: false, base: "", key: "", model: "cogvideox-flash" },
+      video: { backend: true, base: "", key: "", model: "cogvideox-flash" },
       // 云端媒体审核：默认关闭；zhipu 免费额度最多，tencent/alibaba 需注册
       moderate: { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
     },
@@ -2119,6 +2118,9 @@ window.SEED = {
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
     updateUrl: "",
     cloud: {
+      // pyq=自建服务器（默认）；supabase=旧版兼容
+      mode: "pyq",
+      server: "",
       url: "https://cvhbpiggofkpsynyplss.supabase.co",
       key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aGJwaWdnb2ZrcHN5bnlwbHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTk1NjksImV4cCI6MjEwODY3NTU2OX0.MQQT6To8tmYskadlPinZE_vExsQJf4n18dBrg6CA9NU",
       account: "",
@@ -2576,10 +2578,12 @@ window.SEED = {
           }
           if (typeof s.settings.updateUrl !== "string") s.settings.updateUrl = "";
           if (!s.settings.cloud || typeof s.settings.cloud !== "object") {
-            s.settings.cloud = { url: "", key: "", account: "", auto: true };
+            s.settings.cloud = { mode: "pyq", server: "", url: "", key: "", account: "", auto: true };
           }
           // 老用户升级：自动补上内置云端地址与 key（用户自己填过的不覆盖）
           const seedCloud = (window.SEED && SEED.settings && SEED.settings.cloud) || {};
+          if (!s.settings.cloud.mode) s.settings.cloud.mode = "pyq";
+          if (typeof s.settings.cloud.server !== "string") s.settings.cloud.server = "";
           if (!s.settings.cloud.url && seedCloud.url) s.settings.cloud.url = seedCloud.url;
           if (!s.settings.cloud.key && seedCloud.key) s.settings.cloud.key = seedCloud.key;
           if (typeof s.settings.cloud.auto !== "boolean") s.settings.cloud.auto = true;
@@ -4803,7 +4807,7 @@ window.SEED = {
     );
   }
 
-  /* ---------- 云端同步（Supabase） ---------- */
+  /* ---------- 账号与云同步（自建 pyq-server） ---------- */
   function cloudCard() {
     const c = (store.settings && store.settings.cloud) || {};
     const on = !!window.Cloud;
@@ -4811,49 +4815,73 @@ window.SEED = {
     const session = on && Cloud.hasSession();
     const u = session ? Cloud.user() : null;
     const st = on ? Cloud.state() : {};
+    const pyq = !!(on && Cloud.mode && Cloud.mode() === "pyq");
     const tag = session
       ? '<span class="tag green">已连接</span>'
       : configured ? '<span class="tag orange">未登录</span>' : '<span class="tag gray">未配置</span>';
 
-    const account = session && u
-      ? "已登录：" + Core.escapeHtml((u.email || "").replace(/@pyq\.local$/, ""))
-      : "用手机号或邮箱注册 / 登录；手机号会自动转成 手机号@pyq.local";
+    const who = session && u
+      ? Core.escapeHtml((u.name ? u.name + " · " : "") + (u.phone || u.email || u.id || "").replace(/@pyq\.local$/, ""))
+      : "";
+
+    const digest = String((store && store.personaDigest) || "").trim();
+    const personaCard = session
+      ? '<div class="card" style="box-shadow:none;margin-top:10px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<b style="font-size:13px">人物画像（服务器每日 0 点学习）</b>' +
+            (digest ? '<span class="tag green">已生成</span>' : '<span class="tag gray">待学习</span>') +
+          "</div>" +
+          '<div class="muted" style="margin:6px 0 8px">' +
+            (digest
+              ? "已学习你的资料和文案样本，生成文案时会优先使用它，资料没写的事实不会被编造。<br>更新时间：" +
+                (store.lastLearnAt ? Core.timeAgo(store.lastLearnAt) : "—")
+              : "还没有画像。填写「让 AI 认识你」并上传文案后，服务器会在每天 0 点自动学习；也可以现在手动生成。") +
+          "</div>" +
+          (digest ? '<div class="muted" style="max-height:120px;overflow:auto;background:#F7F8FA;border-radius:8px;padding:8px;white-space:pre-wrap">' + Core.escapeHtml(digest.slice(0, 500)) + (digest.length > 500 ? "…" : "") + "</div>" : "") +
+          '<button class="btn soft small block mt12" onclick="App.buildPersonaNow()">立即学习我的资料</button>' +
+        "</div>"
+      : "";
+
+    const authForm = session ? "" :
+      '<div class="field"><label>自建服务器地址</label>' +
+        '<input class="input" id="clServer" placeholder="https://你的服务器地址（不带 /v1）" value="' + Core.escapeHtml(c.server || "") + '" /></div>' +
+      '<div class="field"><label>云账号（手机号 / 邮箱）</label>' +
+        '<input class="input" id="clAccount" placeholder="13800138000 或 you@mail.com" value="' + Core.escapeHtml(c.account || "") + '" /></div>' +
+      '<div class="field"><label>密码（6 位以上）</label>' +
+        '<input class="input" id="clPwd" type="password" placeholder="登录密码" /></div>' +
+      '<div class="btn-row">' +
+        '<button class="btn ghost small" onclick="App.cloudAuth(\'up\')">注册并登录</button>' +
+        '<button class="btn primary small" onclick="App.cloudAuth(\'in\')">登录</button>' +
+      "</div>" +
+      '<div class="muted" style="margin-top:8px">' + (pyq
+        ? "注册后，资料、文案、素材、历史、生成记录全部存到你的云服务器；换手机登录同一个账号即可恢复。"
+        : "当前为 Supabase 兼容模式，可到「AI 模型接入 → 云同步」切回自建服务器。") + "</div>";
+
+    const sessionBox = session
+      ? '<div class="muted">已登录：' + who + "</div>" +
+        '<div class="muted" style="margin-top:2px">服务器：' + Core.escapeHtml(c.server || c.url || "") + "</div>" +
+        personaCard +
+        '<div class="btn-row" style="margin-top:12px">' +
+          '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
+          '<button class="btn soft small" onclick="App.cloudPullNow()">从云端恢复</button>' +
+          '<button class="btn ghost small" onclick="App.cloudSignOut()">退出账号</button>' +
+        "</div>" +
+        '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
+          "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传</div></div>" +
+          '<label class="switch"><input type="checkbox" ' + (c.auto !== false ? "checked" : "") + ' onchange="App.toggleCloudAuto(this.checked)" /><i></i></label>' +
+        "</div>" +
+        '<div class="muted" style="margin-top:8px">上次上传：' + (st.lastPush ? Core.timeAgo(st.lastPush) : "—") +
+          " · 上次拉取：" + (st.lastPull ? Core.timeAgo(st.lastPull) : "—") + "</div>" +
+        (st.error ? '<div class="ar-err">' + Core.escapeHtml(st.error) + "</div>" : "")
+      : "";
 
     return (
-      '<div class="section-title"><h2>云端同步</h2><span>网页版 / APP 互通</span></div>' +
+      '<div class="section-title"><h2>账号与云同步</h2><span>资料跟随账号</span></div>' +
       '<div class="card">' +
-        '<div class="cloud-head">' + icon("cloud", 15) + "<b>Supabase 云端账号</b>" + tag + "</div>" +
-        '<div class="muted" style="margin:6px 0 10px">在任意版本注册同一个云账号，资料、文案、素材、选题、排期都会自动互通。</div>' +
-        '<div' + (session ? ' style="display:none"' : '') + '>' +
-        '<div class="field"><label>Project URL</label>' +
-          '<input class="input" id="clUrl" placeholder="https://xxxx.supabase.co" value="' + Core.escapeHtml(c.url || "") + '" /></div>' +
-        '<div class="field"><label>anon public key</label>' +
-          '<input class="input" id="clKey" placeholder="eyJhbGciOi..." value="' + Core.escapeHtml(c.key || "") + '" /></div>' +
-        '<button class="btn ghost small block" onclick="App.saveCloudCfg()">保存云端配置</button>' +
-        '<div class="field" style="margin-top:12px"><label>云账号（手机号 / 邮箱）</label>' +
-          '<input class="input" id="clAccount" placeholder="13800138000 或 you@mail.com" value="' + Core.escapeHtml(c.account || "") + '" /></div>' +
-        '<div class="field"><label>密码（6 位以上）</label>' +
-          '<input class="input" id="clPwd" type="password" placeholder="登录密码" /></div>' +
-        '<div class="btn-row">' +
-          '<button class="btn ghost small" onclick="App.cloudAuth(\'up\')">注册并登录</button>' +
-          '<button class="btn primary small" onclick="App.cloudAuth(\'in\')">登录</button>' +
-        "</div>" +
-        '<div class="muted" style="margin-top:8px">' + account + "</div>" + "</div>" +
-        (session
-          ? '<div class="muted">' + account + "</div>" +
-            '<div class="btn-row" style="margin-top:12px">' +
-              '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
-              '<button class="btn soft small" onclick="App.cloudPullNow()">从云端拉取</button>' +
-              '<button class="btn ghost small" onclick="App.cloudSignOut()">退出云账号</button>' +
-            "</div>" +
-            '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
-              "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传；每 3 分钟拉取一次</div></div>" +
-              '<label class="switch"><input type="checkbox" ' + (c.auto !== false ? "checked" : "") + ' onchange="App.toggleCloudAuto(this.checked)" /><i></i></label>' +
-            "</div>" +
-            '<div class="muted" style="margin-top:8px">上次上传：' + (st.lastPush ? Core.timeAgo(st.lastPush) : "—") +
-              " · 上次拉取：" + (st.lastPull ? Core.timeAgo(st.lastPull) : "—") + "</div>" +
-            (st.error ? '<div class="ar-err">' + Core.escapeHtml(st.error) + "</div>" : "")
-          : "") +
+        '<div class="cloud-head">' + icon("cloud", 15) + "<b>" + (pyq ? "自建云服务器" : "Supabase 云账号") + "</b>" + tag + "</div>" +
+        '<div class="muted" style="margin:6px 0 10px">资料、文案、素材、选题、排期、生成记录全部跟随账号存在云端，退出登录、换设备登录都不会丢。</div>' +
+        authForm +
+        sessionBox +
       "</div>"
     );
   }
@@ -5024,18 +5052,16 @@ window.SEED = {
       '<div class="page">' +
         UI.head("AI 模型接入", "文案 / 图片 / 视频 · 支持免费模型", "", true) +
         '<div class="hint" style="margin-bottom:12px">' + icon("shield", 13) +
-          "<span>全部走 OpenAI 兼容协议。推荐走自建后端代理：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥；也可以直接填自己的 Key，只存本机。</span></div>" +
+          "<span>文案与视频统一走自建后端 pyq-server：真实模型 Key 只放在服务器上，App 和网页端都不保存密钥。服务器地址与「账号与云同步」共用同一个，登录云账号后自动带上身份令牌。</span></div>" +
 
         '<div class="card">' +
-          aiSecHead("spark", "文案生成", t.backend ? "后端代理" : (t.base && t.key ? "已接入" : "未配置")) +
-          '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；未配置时自动使用本地模板。</div>' +
+          aiSecHead("spark", "文案生成", "自建后端") +
+          '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；生成前会注入服务器每日学习的「人物画像摘要」，资料没写到的事实不会编造。</div>' +
           aiPresetChips("text") +
-          aiField("aiTextBase", "接口地址 / 代理地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiTextKey", "API Key / 代理令牌", t.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiTextBase", "自建服务器地址（留空则用云同步地址）", t.base, "https://你的服务器地址") +
+          aiField("aiTextKey", "代理访问令牌（一般留空）", t.key, "留空时自动使用云账号登录令牌", "password") +
           aiField("aiTextModel", "模型", t.model || "glm-4-flash", "glm-4-flash") +
-          '<div class="field"><label class="check"><input type="checkbox" id="aiTextBackend" ' + (t.backend ? "checked" : "") +
-            ' onchange="App.aiToggleBackend(\'text\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
-          '<div class="muted" style="margin:0 0 8px">开启后，「接口地址」填代理根地址（如 https://你的域名/v1），令牌可留空；App 与网页版都不会接触模型密钥。</div>' +
+          '<div class="muted" style="margin:0 0 8px">不需要填任何模型厂商 Key；只需服务器上配置好 ZHIPU_API_KEY。</div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'text\')">测试文案模型</button>' +
         "</div>" +
 
@@ -5055,14 +5081,12 @@ window.SEED = {
         "</div>" +
 
         '<div class="card mt12">' +
-          aiSecHead("video", "视频生成", vd.backend ? "后端代理" : (vd.base && vd.key ? "已接入" : "未配置")) +
-          '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用。</div>' +
+          aiSecHead("video", "视频生成", "自建后端") +
+          '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用，密钥只在服务器。</div>' +
           aiPresetChips("video") +
-          aiField("aiVideoBase", "接口地址 / 代理地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiVideoKey", "API Key / 代理令牌", vd.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiVideoBase", "自建服务器地址（留空则用云同步地址）", vd.base, "https://你的服务器地址") +
+          aiField("aiVideoKey", "代理访问令牌（一般留空）", vd.key, "留空时自动使用云账号登录令牌", "password") +
           aiField("aiVideoModel", "模型", vd.model || "cogvideox-flash", "cogvideox-flash") +
-          '<div class="field"><label class="check"><input type="checkbox" id="aiVideoBackend" ' + (vd.backend ? "checked" : "") +
-            ' onchange="App.aiToggleBackend(\'video\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
         "</div>" +
 
@@ -5093,7 +5117,7 @@ window.SEED = {
       (mod.provider === "zhipu" ? (mod.apiKey ? "云审智谱" : "云审未填 Key") :
       mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "云审腾讯" : "云审未填密钥") :
       mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "云审阿里" : "云审未填密钥") : "云审已开启");
-    return (t.backend ? "文案走代理" : (t.base && t.key ? "文案已接入" : "文案未配置")) + " · " + imgState + (vd.backend ? " · 视频走代理" : (vd.base && vd.key ? " · 视频已接入" : "")) + " · " + modState;
+    return "文案走自建后端 · " + imgState + " · 视频走自建后端 · " + modState;
   }
 
   function renderMore() {
@@ -5455,11 +5479,16 @@ window.SEED = {
 
 </script>
 <script>
-/* 云端账号 + 数据同步（Supabase 免费版）
- * - 纯浏览器 fetch，网页版与 App（WebView）行为一致
- * - 账号：手机号或邮箱 + 密码（手机号会自动转成 手机号@pyq.local）
- * - 数据表：public.pyq_data(user_id uuid primary key, payload jsonb, updated_at timestamptz)
- * - 策略：整包 last-write-wins；每次本地保存后防抖 2.5 秒自动上传
+/* 账号 + 数据云同步
+ * 默认走自建后端 pyq-server（mode="pyq"）：
+ *   POST /auth/register、/auth/login、/auth/logout
+ *   GET/PUT /sync、GET /persona、POST /persona/build
+ * 保留旧版 Supabase 兼容分支（settings.cloud.mode = "supabase"）。
+ *
+ * 设计原则：
+ *  - 资料跟随账号：资料、草稿、素材、历史、生成记录整包存服务器；
+ *  - 整包 last-write-wins，PUT 带 baseUpdatedAt，云端更新时返回 409 + 云端版本；
+ *  - 本地保存后防抖 2.5 秒自动上传；登录后先拉取再渲染。
  */
 (function () {
   const SESSION_KEY = "pyq_cloud_session";
@@ -5479,16 +5508,28 @@ window.SEED = {
   function cfg() {
     const s = (window.Core && Core.store && Core.store.settings) || {};
     const c = s.cloud || {};
+    const mode = String(c.mode || "pyq").toLowerCase() === "supabase" ? "supabase" : "pyq";
     return {
+      mode: mode,
+      server: String(c.server || "").trim().replace(/\/+$/, ""),
       url: String(c.url || "").trim().replace(/\/+$/, ""),
       key: String(c.key || "").trim(),
       account: String(c.account || "").trim(),
       auto: c.auto !== false
     };
   }
-  function configured() { const c = cfg(); return !!(c.url && c.key); }
-  function hasSession() { return !!(session && session.access_token && session.user && session.user.id); }
+
+  function mode() { return cfg().mode; }
+  function serverBase() { return cfg().server; }
+
+  function configured() {
+    const c = cfg();
+    return c.mode === "pyq" ? !!c.server : !!(c.url && c.key);
+  }
+
+  function hasSession() { return !!(session && session.access_token && session.user && (session.user.id || session.user.phone)); }
   function user() { return hasSession() ? session.user : null; }
+  function token() { return hasSession() ? session.access_token : ""; }
 
   function loadSession() {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch (e) { return null; }
@@ -5514,8 +5555,41 @@ window.SEED = {
     return data.msg || data.error_description || data.error || data.message || fallback || "请求失败";
   }
 
+  /* ---------------- 底层请求 ---------------- */
+
+  // pyq-server 请求：base 由 settings.cloud.server 提供
+  async function pyq(path, opts) {
+    const c = cfg();
+    if (!c.server) throw new Error("请先填写自建服务器地址");
+    const o = opts || {};
+    const headers = Object.assign({ "Content-Type": "application/json" }, o.headers || {});
+    if (o.auth !== false) {
+      const t = await ensureToken();
+      if (!t) throw new Error("请先登录云账号");
+      headers.Authorization = "Bearer " + t;
+    }
+    const res = await fetch(c.server + path, {
+      method: o.method || "GET",
+      headers: headers,
+      body: o.body ? JSON.stringify(o.body) : undefined
+    });
+    let data = null;
+    const text = await res.text();
+    if (text) {
+      try { data = JSON.parse(text); } catch (e) { data = text; }
+    }
+    if (!res.ok) {
+      const e = new Error(errText(data, "HTTP " + res.status));
+      e.status = res.status;
+      e.data = data;
+      throw e;
+    }
+    return data;
+  }
+
   async function call(path, opts) {
     const c = cfg();
+    if (c.mode === "pyq") return pyq(path, opts);
     if (!c.url || !c.key) throw new Error("请先填写 Supabase 地址和 anon key");
     const o = opts || {};
     const headers = Object.assign(
@@ -5523,8 +5597,8 @@ window.SEED = {
       o.headers || {}
     );
     if (o.auth !== false) {
-      const token = await ensureToken();
-      if (token) headers.Authorization = "Bearer " + token;
+      const t = await ensureToken();
+      if (t) headers.Authorization = "Bearer " + t;
     }
     const res = await fetch(c.url + path, {
       method: o.method || "GET",
@@ -5549,20 +5623,24 @@ window.SEED = {
   async function ensureToken() {
     if (!hasSession()) return null;
     const exp = Number(session.expires_at || 0);
-    if (exp && exp - 60 > Math.floor(Date.now() / 1000)) return session.access_token;
-    const c = cfg();
-    const res = await fetch(c.url + "/auth/v1/token?grant_type=refresh_token", {
-      method: "POST",
-      headers: { apikey: c.key, "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: session.refresh_token })
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || !data.access_token) {
-      saveSession(null);
-      throw new Error(errText(data, "登录已过期，请重新登录"));
+    if (!exp || exp - 60 > Math.floor(Date.now() / 1000)) return session.access_token;
+    if (cfg().mode === "supabase") {
+      const c = cfg();
+      const res = await fetch(c.url + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: { apikey: c.key, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: session.refresh_token })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.access_token) {
+        saveSession(null);
+        throw new Error(errText(data, "登录已过期，请重新登录"));
+      }
+      saveSession(normalizeSession(data));
+      return session.access_token;
     }
-    saveSession(normalizeSession(data));
-    return session.access_token;
+    saveSession(null);
+    throw new Error("登录已过期，请重新登录");
   }
 
   function normalizeSession(data) {
@@ -5575,7 +5653,40 @@ window.SEED = {
     };
   }
 
-  async function signUp(account, password) {
+  function pyqSession(data) {
+    return {
+      access_token: data.token,
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+      user: data.user || null,
+      mode: "pyq"
+    };
+  }
+
+  function accountId(account) {
+    const a = String(account || "").trim();
+    if (a.indexOf("@") >= 0) return a.toLowerCase();
+    return a.replace(/\D/g, "");
+  }
+
+  async function signUp(account, password, nickname) {
+    const c = cfg();
+    if (c.mode === "pyq") {
+      if (!c.server) return { ok: false, error: "请先填写自建服务器地址" };
+      if (!accountId(account)) return { ok: false, error: "请填写手机号或邮箱" };
+      if (!password || password.length < 6) return { ok: false, error: "密码至少 6 位" };
+      try {
+        const data = await pyq("/auth/register", {
+          method: "POST", auth: false,
+          body: { account: accountId(account), password: password, nickname: String(nickname || "").trim() }
+        });
+        if (!data || !data.ok || !data.token) return { ok: false, error: errText(data, "注册失败") };
+        saveSession(pyqSession(data));
+        return { ok: true, user: session.user };
+      } catch (e) {
+        const msg = (e && e.message) || "注册失败";
+        return { ok: false, error: /已注册|exists|409/i.test(msg) ? "该账号已注册，请直接登录" : msg };
+      }
+    }
     const email = toEmail(account);
     if (!email) return { ok: false, error: "请填写手机号或邮箱" };
     if (!password || password.length < 6) return { ok: false, error: "密码至少 6 位" };
@@ -5595,6 +5706,24 @@ window.SEED = {
   }
 
   async function signIn(account, password) {
+    const c = cfg();
+    if (c.mode === "pyq") {
+      if (!c.server) return { ok: false, error: "请先填写自建服务器地址" };
+      const id = accountId(account);
+      if (!id) return { ok: false, error: "请填写手机号或邮箱" };
+      if (!password) return { ok: false, error: "请填写密码" };
+      try {
+        const data = await pyq("/auth/login", {
+          method: "POST", auth: false, body: { account: id, password: password }
+        });
+        if (!data || !data.ok || !data.token) return { ok: false, error: errText(data, "账号或密码不正确") };
+        saveSession(pyqSession(data));
+        return { ok: true, user: session.user, persona: data.persona || null };
+      } catch (e) {
+        const msg = (e && e.message) || "登录失败";
+        return { ok: false, error: /401|不正确|invalid/i.test(msg) ? "账号或密码不正确" : msg };
+      }
+    }
     const email = toEmail(account);
     if (!email) return { ok: false, error: "请填写手机号或邮箱" };
     if (!password) return { ok: false, error: "请填写密码" };
@@ -5613,15 +5742,17 @@ window.SEED = {
 
   async function signOut() {
     const c = cfg();
-    const token = session && session.access_token;
+    const t = session && session.access_token;
     saveSession(null);
-    if (c.url && token) {
-      try {
+    try {
+      if (c.mode === "pyq" && c.server && t) {
+        await fetch(c.server + "/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + t } });
+      } else if (c.url && t) {
         await fetch(c.url + "/auth/v1/logout", {
-          method: "POST", headers: { apikey: c.key, Authorization: "Bearer " + token }
+          method: "POST", headers: { apikey: c.key, Authorization: "Bearer " + t }
         });
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
     emit();
     return { ok: true };
   }
@@ -5651,7 +5782,11 @@ window.SEED = {
       rules: s.rules,
       rulesVersion: s.rulesVersion,
       rulesLiveVersion: s.rulesLiveVersion,
+      auditLog: s.auditLog,
       seedCleaned: s.seedCleaned,
+      personaDigest: s.personaDigest || "",
+      personaHash: s.personaHash || "",
+      lastLearnAt: s.lastLearnAt || "",
       cloudUpdatedAt: s.cloudUpdatedAt || ""
     };
 
@@ -5674,20 +5809,30 @@ window.SEED = {
     return { payload: snap, size: json.length };
   }
 
-  function applyRemote(payload, updatedAt) {
-    if (!payload) return false;
+  function applyPersona(persona) {
+    if (!persona) return;
+    Core.store.personaDigest = persona.digest || "";
+    Core.store.personaHash = persona.hash || "";
+    Core.store.lastLearnAt = persona.lastLearnAt || "";
+  }
+
+  function applyRemote(payload, updatedAt, persona) {
+    if (!payload && !persona) return false;
     suspended = true;
     try {
       const s = Core.store;
       const localSettings = s.settings;
-      Object.keys(s).forEach((k) => { delete s[k]; });
-      Object.assign(s, payload);
-      s.settings = localSettings || {};
-      s.cloudUpdatedAt = updatedAt || payload.cloudUpdatedAt || "";
-      // 兜底默认值，避免旧数据缺少字段导致页面报错
-      if (!s.materials) s.materials = { copy: [], images: [], videos: [] };
-      if (!s.profiles) s.profiles = {};
-      if (!s.dailyDate) s.dailyDate = "";
+      if (payload) {
+        Object.keys(s).forEach((k) => { delete s[k]; });
+        Object.assign(s, payload);
+        s.settings = localSettings || {};
+        s.cloudUpdatedAt = updatedAt || payload.cloudUpdatedAt || "";
+        // 兜底默认值，避免旧数据缺少字段导致页面报错
+        if (!s.materials) s.materials = { copy: [], images: [], videos: [] };
+        if (!s.profiles) s.profiles = {};
+        if (!s.dailyDate) s.dailyDate = "";
+      }
+      applyPersona(persona);
       Core.save();
     } finally {
       suspended = false;
@@ -5704,21 +5849,47 @@ window.SEED = {
     emit();
     try {
       const c = cfg();
-      const u = user();
       const snap = snapshot();
-      await call("/rest/v1/" + TABLE + "?on_conflict=user_id", {
-        method: "POST",
-        prefer: "resolution=merge-duplicates,return=minimal",
-        body: [{ user_id: u.id, payload: snap.payload, updated_at: new Date().toISOString() }]
-      });
-      const now = new Date().toISOString();
+      let resp;
+      if (c.mode === "pyq") {
+        resp = await pyq("/sync", {
+          method: "PUT",
+          body: { payload: snap.payload, baseUpdatedAt: Core.store.cloudUpdatedAt || "" }
+        });
+      } else {
+        const u = user();
+        resp = await call("/rest/v1/" + TABLE + "?on_conflict=user_id", {
+          method: "POST",
+          prefer: "resolution=merge-duplicates,return=minimal",
+          body: [{ user_id: u.id, payload: snap.payload, updated_at: new Date().toISOString() }]
+        });
+        resp = { ok: true, updatedAt: new Date().toISOString() };
+      }
+      if (!resp || resp.ok === false || resp.conflict) {
+        if (resp && resp.conflict) {
+          applyRemote(resp.payload, resp.updatedAt, resp.persona);
+          state.lastPull = resp.updatedAt || "";
+          if (!silent && window.App && App.toast) App.toast("云端有更新的内容，已自动同步");
+          return { ok: false, conflict: true, direction: "down" };
+        }
+        throw new Error((resp && resp.error) || "上传失败");
+      }
+      const now = resp.updatedAt || new Date().toISOString();
       Core.store.cloudUpdatedAt = now;
       try { localStorage.setItem("pyq_store_v1", JSON.stringify(Core.store)); } catch (e) {}
       state.lastPush = now;
       state.error = "";
       if (!silent && window.App && App.toast) App.toast("已上传到云端");
-      return { ok: true, size: snap.size };
+      return { ok: true, size: snap.size, updatedAt: now };
     } catch (e) {
+      if (e && e.status === 409 && e.data && e.data.conflict) {
+        applyRemote(e.data.payload, e.data.updatedAt, e.data.persona);
+        state.lastPull = e.data.updatedAt || "";
+        state.error = "";
+        if (!silent && window.App && App.toast) App.toast("云端有更新的内容，已自动同步");
+        emit();
+        return { ok: false, conflict: true, direction: "down" };
+      }
       state.error = (e && e.message) || "上传失败";
       if (!silent && window.App && App.toast) App.toast("云端上传失败：" + state.error);
       return { ok: false, error: state.error };
@@ -5732,11 +5903,22 @@ window.SEED = {
   async function pull(apply) {
     if (!configured() || !hasSession()) return { ok: false, error: "未登录云账号" };
     try {
-      const u = user();
-      const rows = await call("/rest/v1/" + TABLE + "?select=payload,updated_at&user_id=eq." + encodeURIComponent(u.id));
-      const row = Array.isArray(rows) ? rows[0] : rows;
-      if (!row) return { ok: true, empty: true };
-      if (apply !== false) applyRemote(row.payload, row.updated_at);
+      let row;
+      if (cfg().mode === "pyq") {
+        const data = await pyq("/sync", { method: "GET" });
+        if (!data || data.ok === false) return { ok: false, error: (data && data.error) || "拉取失败" };
+        row = { payload: data.payload, updated_at: data.updatedAt || "", persona: data.persona || null };
+      } else {
+        const u = user();
+        const rows = await call("/rest/v1/" + TABLE + "?select=payload,updated_at&user_id=eq." + encodeURIComponent(u.id));
+        const r = Array.isArray(rows) ? rows[0] : rows;
+        row = r ? { payload: r.payload, updated_at: r.updated_at } : null;
+      }
+      if (!row || (!row.payload && !row.persona)) {
+        state.lastPull = (row && row.updated_at) || "";
+        return { ok: true, empty: true };
+      }
+      if (apply !== false) applyRemote(row.payload, row.updated_at, row.persona);
       state.lastPull = row.updated_at || "";
       state.error = "";
       return { ok: true, row: row };
@@ -5758,12 +5940,47 @@ window.SEED = {
     }
     const remoteAt = r.row.updated_at || "";
     if (remoteAt > local) {
-      applyRemote(r.row.payload, remoteAt);
+      applyRemote(r.row.payload, remoteAt, r.row.persona);
       if (!silent && window.App) { App.toast("已从云端同步最新内容"); App.render(true); }
       return { ok: true, direction: "down" };
     }
     const p = await push(true);
+    if (p && p.conflict) return { ok: true, direction: "down" };
     return { ok: p.ok, direction: "up" };
+  }
+
+  /* ---------- 人物画像 ---------- */
+  async function getPersona() {
+    if (!configured() || !hasSession()) return { ok: false, error: "未登录云账号" };
+    try {
+      if (cfg().mode === "pyq") {
+        const data = await pyq("/persona", { method: "GET" });
+        applyPersona(data);
+        return data;
+      }
+      return { ok: true, digest: Core.store.personaDigest || "" };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || "读取失败" };
+    }
+  }
+
+  async function buildPersona(force) {
+    if (!configured() || !hasSession()) return { ok: false, error: "未登录云账号" };
+    if (cfg().mode !== "pyq") return { ok: false, error: "当前云模式不支持画像学习" };
+    try {
+      const snap = snapshot();
+      const data = await pyq("/persona/build", { method: "POST", body: { force: !!force, payload: snap.payload } });
+      if (data && data.ok && data.digest) {
+        applyPersona(data);
+        Core.store.personaDigest = data.digest;
+        Core.store.personaHash = data.hash || "";
+        Core.store.lastLearnAt = data.lastLearnAt || "";
+        Core.save();
+      }
+      return data || { ok: false, error: "学习失败" };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || "学习失败" };
+    }
   }
 
   /* ---------- 自动同步 ---------- */
@@ -5784,10 +6001,12 @@ window.SEED = {
   function onChange(fn) { listeners.push(fn); }
 
   window.Cloud = {
-    configured, hasSession, user, signUp, signIn, signOut,
+    configured, hasSession, user, token, serverBase, mode,
+    signUp, signIn, signOut,
     push, pull: (apply) => pull(apply), reconcile, markDirty, init,
+    getPersona, buildPersona,
     state: () => state, onChange, toEmail,
-    applyRemote: (payload, updatedAt) => applyRemote(payload, updatedAt),
+    applyRemote: (payload, updatedAt, persona) => applyRemote(payload, updatedAt, persona),
     snapshot
   };
 })();
@@ -6124,17 +6343,17 @@ window.SEED = {
     let r;
     try { r = await Cloud.signIn(phone, password); } catch (e) { return null; }
     if (!r || !r.ok) return null;
-    Cloud.init().then(() => {
-      if (window.App && App.render) App.render(true);
-    }).catch(() => {});
-    return { name: "用户" + phone.slice(-4) };
+    // 先拉取云端资料再返回，保证换设备登录时资料已经恢复
+    try { await Cloud.init(); } catch (e) {}
+    if (window.App && App.render) App.render(true);
+    return { name: (r.user && r.user.name) || ("用户" + phone.slice(-4)) };
   }
 
   // 注册时同步创建云端账号，让其他版本可以用同一账号登录
   async function cloudSignUpQuiet(phone, nickname, password) {
     if (!cloudReady() || Cloud.hasSession()) return;
     try {
-      const r = await Cloud.signUp(phone, password);
+      const r = await Cloud.signUp(phone, password, nickname);
       if (r && r.ok) await Cloud.push(true);
     } catch (e) {}
   }
@@ -6182,7 +6401,7 @@ window.SEED = {
     if (e) return { ok: false, error: e };
     if (isNative) {
       const r = await call("authRegister", [phone, nickname, password]);
-      if (r && r.ok) cloudSignUpQuiet(phone, nickname, password);
+      if (r && r.ok) await cloudSignUpQuiet(phone, nickname, password);
       return r;
     }
 
@@ -6191,7 +6410,7 @@ window.SEED = {
     acc[phone] = { name: nickname, hash: fakeSha(password), trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
     fakeSave(acc);
     localStorage.setItem(FAKE_SESSION, phone);
-    cloudSignUpQuiet(phone, nickname, password);
+    await cloudSignUpQuiet(phone, nickname, password);
     return { ok: true, me: fakeMe(phone, acc[phone]), msg: "注册成功，免费试用 7 天已开启" };
   }
 
@@ -6224,9 +6443,16 @@ window.SEED = {
   }
 
   async function logout() {
+    // 退出前先确认云端已保存：资料跟随账号，退出登录 / 换设备都不会丢
+    try {
+      if (window.Cloud && Cloud.hasSession()) {
+        if (Cloud.state && Cloud.state().error) await Cloud.push(true);
+        await Cloud.signOut();
+      }
+    } catch (e) {}
     if (isNative) return call("authLogout", []);
     localStorage.removeItem(FAKE_SESSION);
-    return { ok: true };
+    return { ok: true, msg: "已退出，资料已保存在云端" };
   }
 
   async function member() {
@@ -7030,7 +7256,7 @@ window.SEED = {
     c.replaced = false;
     render();
     const cfg = aiCfg().text;
-    if (cfg.base && cfg.key) {
+    if (aiBaseOf(cfg)) {
       toast("AI 正在生成文案…");
       const r = await aiChat([
         { role: "system", content: "你是一位真实的中文朋友圈写作者，擅长写有人味、不营销的日常文案。" },
@@ -7053,13 +7279,15 @@ window.SEED = {
     c.loading = true;
     render();
     const cfg = aiCfg().text;
-    if (cfg.base && cfg.key) {
+    if (aiBaseOf(cfg)) {
       toast("AI 正在润色…");
+      const digest = String((store && store.personaDigest) || "").trim();
       const r = await aiChat([
         { role: "system", content: "你是中文朋友圈润色助手，只调整语气、结构和营销感，不改原意。" },
         { role: "user", content: "请润色下面这条朋友圈，保持原意，去掉 AI 腔和营销感，篇幅：" +
           (c.size === "long" ? "长文 300 字以上" : "短文 " + Core.SHORT_MAX + " 字以内") +
           (c.styles.length ? "；文风：" + c.styles.map((s) => STYLE_HINT[s] || s).join("；") : "") +
+          (digest ? "；只学习下面的语气和句式，不要新增任何事实：\n" + digest : "") +
           "\n\n原文：\n" + c.text + "\n\n直接输出润色后的正文。" }
       ]);
       if (r && r.ok && r.text) {
@@ -7680,10 +7908,8 @@ window.SEED = {
   // 免费 / 常用预设：一键填入接口地址与模型
   const AI_PRESETS = {
     text: [
-      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "glm-4-flash", backend: true },
-      { id: "zhipu", name: "智谱 GLM（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
-      { id: "siliconflow", name: "硅基流动（送额度）", base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" },
-      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+      { id: "backend", name: "自建服务器（推荐）", base: "", model: "glm-4-flash", backend: true },
+      { id: "custom", name: "自定义服务器地址", base: "", model: "glm-4-flash", backend: true }
     ],
     image: [
       { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
@@ -7691,9 +7917,8 @@ window.SEED = {
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
-      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "cogvideox-flash", backend: true },
-      { id: "zhipu", name: "智谱 CogVideoX（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogvideox-flash" },
-      { id: "custom", name: "自定义兼容接口", base: "", model: "" }
+      { id: "backend", name: "自建服务器（推荐）", base: "", model: "cogvideox-flash", backend: true },
+      { id: "custom", name: "自定义服务器地址", base: "", model: "cogvideox-flash", backend: true }
     ]
   };
 
@@ -7701,23 +7926,44 @@ window.SEED = {
     if (!store.settings) store.settings = {};
     if (!store.settings.ai) store.settings.ai = {};
     const ai = store.settings.ai;
-    if (!ai.text) ai.text = { backend: false, base: "", key: "", model: "" };
+    if (!ai.text) ai.text = { backend: true, base: "", key: "", model: "glm-4-flash" };
     if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
-    if (!ai.video) ai.video = { backend: false, base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.video) ai.video = { backend: true, base: "", key: "", model: "cogvideox-flash" };
     if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
     if (!ai.image.mode) ai.image.mode = "free";
+    // AI 统一走自建后端：文案与视频强制 backend，不再提供直连 Key 模式
+    ai.text.backend = true;
+    ai.video.backend = true;
     // 旧版「内置模型」迁移为「自建后端代理」
     if (ai.text.builtin) {
-      ai.text.backend = true;
       ai.text.base = ai.text.base || ai.text.proxyUrl || "";
       ai.text.builtin = false;
     }
     if (ai.video.builtin) {
-      ai.video.backend = true;
       ai.video.base = ai.video.base || ai.video.proxyUrl || "";
       ai.video.builtin = false;
     }
     return ai;
+  }
+
+  // 自建服务器地址：账号同步与 AI 代理共用同一个地址
+  function aiServerBase() {
+    const c = (store.settings && store.settings.cloud) || {};
+    return String(c.server || "").trim().replace(/\/+$/, "");
+  }
+
+  // 后端模式且没单独填地址时，自动使用云同步里配置的服务器
+  function aiBaseOf(c) {
+    const base = String((c && c.base) || "").trim();
+    if (base) return base.replace(/\/+$/, "");
+    return c && c.backend ? aiServerBase() : "";
+  }
+
+  // 后端模式：优先用用户填的代理令牌，其次用已登录云账号的 token
+  function aiAuthOf(c) {
+    if (c.key) return c.key;
+    if (c.backend && window.Cloud && Cloud.token) return Cloud.token();
+    return "";
   }
 
   // 图片配置（兼容旧字段）
@@ -7739,16 +7985,18 @@ window.SEED = {
   async function aiChat(messages) {
     const c = aiCfg().text;
     const model = c.model || "glm-4-flash";
-    if (!c.base) return { ok: false, error: c.backend ? "未配置后端代理地址" : "未配置文案模型" };
-    if (!c.backend && !c.key) return { ok: false, error: "未配置 API Key" };
+    const base = aiBaseOf(c);
+    const auth = aiAuthOf(c);
+    if (!base) return { ok: false, error: "未配置自建后端地址（到「云同步」或「AI 模型接入」填写）" };
+    if (!c.backend && !auth) return { ok: false, error: "未配置 API Key" };
     const body = { model: model, messages: messages, temperature: 0.8, stream: false };
     if (window.NativeApp && NativeApp.available() && NativeApp.aiChat) {
-      return NativeApp.aiChat(c.base, c.key, model, JSON.stringify(messages));
+      return NativeApp.aiChat(base, auth, model, JSON.stringify(messages));
     }
     try {
-      const url = c.base.replace(/\/+$/, "") + "/chat/completions";
+      const url = base + "/chat/completions";
       const headers = { "Content-Type": "application/json" };
-      if (c.key) headers["Authorization"] = "Bearer " + c.key;
+      if (auth) headers["Authorization"] = "Bearer " + auth;
       if (c.backend && c.key) headers["X-Pyq-Token"] = c.key;
       const res = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) });
       const txt = await res.text();
@@ -7817,6 +8065,16 @@ window.SEED = {
       .map((id) => (store.materials.copy.find((m) => m.id === id) || {}).text)
       .filter(Boolean);
     if (mats.length) lines.push("可参考的真实素材：" + mats.join(" / "));
+    // 服务器每日 0 点学习生成的人物画像：优先级最高，事实与风格都以此为准
+    const digest = String((store && store.personaDigest) || "").trim();
+    if (digest) {
+      lines.push("【人物画像摘要 · 服务器每日学习生成，最高优先级】");
+      lines.push(digest);
+      lines.push(
+        "硬性规则：只能使用上面「事实清单」里明确出现的事实；清单没提到的职业经历、客户案例、数据、地点、时间、" +
+        "他人评价、收入、承诺，一律不许编造。信息不足时写得概括、克制，宁可少写也不虚构。风格按「写作风格」写，不要复述摘要本身。"
+      );
+    }
     // 资料只作为「理解作者」的背景，明确禁止复述，避免把个人简介整段写进文案
     const profile = aiPersonaBlock();
     if (profile) {
@@ -7885,21 +8143,21 @@ window.SEED = {
 
   function aiSaveSettings() {
     const ai = aiCfg();
-    const tBackend = document.getElementById("aiTextBackend");
-    const vBackend = document.getElementById("aiVideoBackend");
-    ai.text.backend = !!(tBackend && tBackend.checked);
-    ai.text.base = document.getElementById("aiTextBase").value.trim();
-    ai.text.key = document.getElementById("aiTextKey").value.trim();
-    ai.text.model = document.getElementById("aiTextModel").value.trim();
-    ai.image.mode = document.getElementById("aiImageMode").value;
-    ai.image.base = document.getElementById("aiImageBase").value.trim();
-    ai.image.key = document.getElementById("aiImageKey").value.trim();
-    ai.image.model = document.getElementById("aiImageModel").value.trim();
-    ai.image.size = document.getElementById("aiImageSize").value;
-    ai.video.backend = !!(vBackend && vBackend.checked);
-    ai.video.base = document.getElementById("aiVideoBase").value.trim();
-    ai.video.key = document.getElementById("aiVideoKey").value.trim();
-    ai.video.model = document.getElementById("aiVideoModel").value.trim();
+    const el = (id) => document.getElementById(id);
+    const val = (id) => { const x = el(id); return x ? x.value.trim() : ""; };
+    ai.text.backend = true;
+    ai.text.base = val("aiTextBase");
+    ai.text.key = val("aiTextKey");
+    ai.text.model = val("aiTextModel");
+    ai.image.mode = el("aiImageMode").value;
+    ai.image.base = val("aiImageBase");
+    ai.image.key = val("aiImageKey");
+    ai.image.model = val("aiImageModel");
+    ai.image.size = el("aiImageSize").value;
+    ai.video.backend = true;
+    ai.video.base = val("aiVideoBase");
+    ai.video.key = val("aiVideoKey");
+    ai.video.model = val("aiVideoModel");
     // 云端审核
     const modOn = document.getElementById("aiModerateEnabled");
     const modProv = document.getElementById("aiModerateProvider");
@@ -7925,16 +8183,15 @@ window.SEED = {
   async function aiTest(kind) {
     const ai = aiCfg();
     if (kind === "text") {
-      ai.text.base = document.getElementById("aiTextBase").value.trim();
-      ai.text.key = document.getElementById("aiTextKey").value.trim();
-      ai.text.model = document.getElementById("aiTextModel").value.trim();
-      ai.text.backend = !!(document.getElementById("aiTextBackend") || {}).checked;
+      ai.text.base = (document.getElementById("aiTextBase") || {}).value ? document.getElementById("aiTextBase").value.trim() : "";
+      ai.text.key = (document.getElementById("aiTextKey") || {}).value ? document.getElementById("aiTextKey").value.trim() : "";
+      ai.text.model = (document.getElementById("aiTextModel") || {}).value ? document.getElementById("aiTextModel").value.trim() : "";
+      ai.text.backend = true;
       save();
-      if (!ai.text.base) { toast(ai.text.backend ? "先填后端代理地址" : "先填接口地址"); return; }
-      if (!ai.text.backend && !ai.text.key) { toast("先填 API Key"); return; }
-      toast("正在测试" + (ai.text.backend ? "后端代理" : "文案模型") + "…");
+      if (!aiBaseOf(ai.text)) { toast("先填自建服务器地址"); return; }
+      toast("正在测试自建后端…");
       const r = await aiChat([{ role: "user", content: "只回复两个字：你好" }]);
-      toast(r && r.ok ? "文案模型连接成功：" + String(r.text || "").slice(0, 20) : "文案模型失败：" + ((r && r.error) || ""));
+      toast(r && r.ok ? "后端模型连接成功：" + String(r.text || "").slice(0, 20) : "后端模型失败：" + ((r && r.error) || ""));
       return;
     }
     if (kind === "image") {
@@ -8925,7 +9182,7 @@ window.SEED = {
     aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
-    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,
+    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
       return v ? (v.url || videoPreviewUrls[id] || "") : "";
@@ -9385,22 +9642,22 @@ window.SEED = {
     if (ui.page === "update") render();
   }
 
-  /* ---------- 云端同步（Supabase）：账号 + 数据 ---------- */
+  /* ---------- 账号与云同步（自建 pyq-server）：账号 + 数据 ---------- */
   function cloudCfgInputs() {
     const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
-    return { url: get("clUrl"), key: get("clKey"), account: get("clAccount"), pwd: get("clPwd") };
+    return { server: get("clServer"), account: get("clAccount"), pwd: get("clPwd") };
   }
 
   function saveCloudCfg() {
     const v = cloudCfgInputs();
     if (!store.settings) store.settings = {};
-    if (!store.settings.cloud) store.settings.cloud = { url: "", key: "", account: "", auto: true };
-    if (!v.url || !v.key) { toast("请先填写 Supabase 地址和 anon key"); return; }
-    store.settings.cloud.url = v.url;
-    store.settings.cloud.key = v.key;
+    if (!store.settings.cloud) store.settings.cloud = { mode: "pyq", server: "", account: "", auto: true };
+    if (!v.server) { toast("请先填写自建服务器地址"); return; }
+    store.settings.cloud.mode = "pyq";
+    store.settings.cloud.server = v.server.replace(/\/+$/, "");
     if (v.account) store.settings.cloud.account = v.account;
     save();
-    toast("云端配置已保存");
+    toast("服务器地址已保存");
     Cloud.init();
     render();
   }
@@ -9408,28 +9665,41 @@ window.SEED = {
   async function cloudAuth(mode) {
     const v = cloudCfgInputs();
     if (!window.Cloud) { toast("云同步模块未加载"); return; }
-    if (!Cloud.configured() && (!v.url || !v.key)) { toast("请先填写 Supabase 地址和 anon key，并点「保存配置」"); return; }
-    if (v.url && v.key) {
-      store.settings.cloud.url = v.url;
-      store.settings.cloud.key = v.key;
-    }
+    if (!v.server) { toast("请填写自建服务器地址"); return; }
+    store.settings.cloud.mode = "pyq";
+    store.settings.cloud.server = v.server.replace(/\/+$/, "");
     if (!v.account) { toast("请填写手机号或邮箱"); return; }
     if (!v.pwd) { toast("请填写密码"); return; }
     store.settings.cloud.account = v.account;
     save();
     toast(mode === "up" ? "正在注册…" : "正在登录…");
-    const r = await (mode === "up" ? Cloud.signUp(v.account, v.pwd) : Cloud.signIn(v.account, v.pwd));
+    let r;
+    if (mode === "up") {
+      r = await Cloud.signUp(v.account, v.pwd, (store.user && store.user.name) || "");
+    } else {
+      r = await Cloud.signIn(v.account, v.pwd);
+    }
     if (!r || !r.ok) { toast(r.error || "操作失败"); render(); return; }
     Core.logAudit("account", mode === "up" ? "signup" : "login", v.account, mode === "up" ? "注册云账号" : "登录云账号");
     const rr = await Cloud.reconcile(false);
     render(true);
-    toast(rr && rr.direction === "down" ? "已登录，内容已从云端恢复" : "已登录，本地内容已上传");
+    toast(rr && rr.direction === "down" ? "已登录，资料与记录已从云端恢复" : "已登录，本地资料已上传到云端");
+  }
+
+  async function buildPersonaNow() {
+    if (!window.Cloud || !Cloud.hasSession()) { toast("请先登录云账号"); return; }
+    toast("正在学习你的资料和文案…");
+    const r = await Cloud.buildPersona(true);
+    if (!r || !r.ok) { toast((r && r.error) || "学习失败"); return; }
+    if (r.skipped) { toast(r.reason || "资料没有变化"); return; }
+    render(true);
+    toast("人物画像已更新，生成文案会优先使用它");
   }
 
   async function cloudSignOut() {
     if (!window.Cloud) return;
     await Cloud.signOut();
-    toast("已退出云账号（本地内容保留）");
+    toast("已退出账号（资料已保存在云端，重新登录即可恢复）");
     render();
   }
 

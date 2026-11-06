@@ -337,7 +337,7 @@
     );
   }
 
-  /* ---------- 云端同步（Supabase） ---------- */
+  /* ---------- 账号与云同步（自建 pyq-server） ---------- */
   function cloudCard() {
     const c = (store.settings && store.settings.cloud) || {};
     const on = !!window.Cloud;
@@ -345,49 +345,73 @@
     const session = on && Cloud.hasSession();
     const u = session ? Cloud.user() : null;
     const st = on ? Cloud.state() : {};
+    const pyq = !!(on && Cloud.mode && Cloud.mode() === "pyq");
     const tag = session
       ? '<span class="tag green">已连接</span>'
       : configured ? '<span class="tag orange">未登录</span>' : '<span class="tag gray">未配置</span>';
 
-    const account = session && u
-      ? "已登录：" + Core.escapeHtml((u.email || "").replace(/@pyq\.local$/, ""))
-      : "用手机号或邮箱注册 / 登录；手机号会自动转成 手机号@pyq.local";
+    const who = session && u
+      ? Core.escapeHtml((u.name ? u.name + " · " : "") + (u.phone || u.email || u.id || "").replace(/@pyq\.local$/, ""))
+      : "";
+
+    const digest = String((store && store.personaDigest) || "").trim();
+    const personaCard = session
+      ? '<div class="card" style="box-shadow:none;margin-top:10px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<b style="font-size:13px">人物画像（服务器每日 0 点学习）</b>' +
+            (digest ? '<span class="tag green">已生成</span>' : '<span class="tag gray">待学习</span>') +
+          "</div>" +
+          '<div class="muted" style="margin:6px 0 8px">' +
+            (digest
+              ? "已学习你的资料和文案样本，生成文案时会优先使用它，资料没写的事实不会被编造。<br>更新时间：" +
+                (store.lastLearnAt ? Core.timeAgo(store.lastLearnAt) : "—")
+              : "还没有画像。填写「让 AI 认识你」并上传文案后，服务器会在每天 0 点自动学习；也可以现在手动生成。") +
+          "</div>" +
+          (digest ? '<div class="muted" style="max-height:120px;overflow:auto;background:#F7F8FA;border-radius:8px;padding:8px;white-space:pre-wrap">' + Core.escapeHtml(digest.slice(0, 500)) + (digest.length > 500 ? "…" : "") + "</div>" : "") +
+          '<button class="btn soft small block mt12" onclick="App.buildPersonaNow()">立即学习我的资料</button>' +
+        "</div>"
+      : "";
+
+    const authForm = session ? "" :
+      '<div class="field"><label>自建服务器地址</label>' +
+        '<input class="input" id="clServer" placeholder="https://你的服务器地址（不带 /v1）" value="' + Core.escapeHtml(c.server || "") + '" /></div>' +
+      '<div class="field"><label>云账号（手机号 / 邮箱）</label>' +
+        '<input class="input" id="clAccount" placeholder="13800138000 或 you@mail.com" value="' + Core.escapeHtml(c.account || "") + '" /></div>' +
+      '<div class="field"><label>密码（6 位以上）</label>' +
+        '<input class="input" id="clPwd" type="password" placeholder="登录密码" /></div>' +
+      '<div class="btn-row">' +
+        '<button class="btn ghost small" onclick="App.cloudAuth(\'up\')">注册并登录</button>' +
+        '<button class="btn primary small" onclick="App.cloudAuth(\'in\')">登录</button>' +
+      "</div>" +
+      '<div class="muted" style="margin-top:8px">' + (pyq
+        ? "注册后，资料、文案、素材、历史、生成记录全部存到你的云服务器；换手机登录同一个账号即可恢复。"
+        : "当前为 Supabase 兼容模式，可到「AI 模型接入 → 云同步」切回自建服务器。") + "</div>";
+
+    const sessionBox = session
+      ? '<div class="muted">已登录：' + who + "</div>" +
+        '<div class="muted" style="margin-top:2px">服务器：' + Core.escapeHtml(c.server || c.url || "") + "</div>" +
+        personaCard +
+        '<div class="btn-row" style="margin-top:12px">' +
+          '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
+          '<button class="btn soft small" onclick="App.cloudPullNow()">从云端恢复</button>' +
+          '<button class="btn ghost small" onclick="App.cloudSignOut()">退出账号</button>' +
+        "</div>" +
+        '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
+          "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传</div></div>" +
+          '<label class="switch"><input type="checkbox" ' + (c.auto !== false ? "checked" : "") + ' onchange="App.toggleCloudAuto(this.checked)" /><i></i></label>' +
+        "</div>" +
+        '<div class="muted" style="margin-top:8px">上次上传：' + (st.lastPush ? Core.timeAgo(st.lastPush) : "—") +
+          " · 上次拉取：" + (st.lastPull ? Core.timeAgo(st.lastPull) : "—") + "</div>" +
+        (st.error ? '<div class="ar-err">' + Core.escapeHtml(st.error) + "</div>" : "")
+      : "";
 
     return (
-      '<div class="section-title"><h2>云端同步</h2><span>网页版 / APP 互通</span></div>' +
+      '<div class="section-title"><h2>账号与云同步</h2><span>资料跟随账号</span></div>' +
       '<div class="card">' +
-        '<div class="cloud-head">' + icon("cloud", 15) + "<b>Supabase 云端账号</b>" + tag + "</div>" +
-        '<div class="muted" style="margin:6px 0 10px">在任意版本注册同一个云账号，资料、文案、素材、选题、排期都会自动互通。</div>' +
-        '<div' + (session ? ' style="display:none"' : '') + '>' +
-        '<div class="field"><label>Project URL</label>' +
-          '<input class="input" id="clUrl" placeholder="https://xxxx.supabase.co" value="' + Core.escapeHtml(c.url || "") + '" /></div>' +
-        '<div class="field"><label>anon public key</label>' +
-          '<input class="input" id="clKey" placeholder="eyJhbGciOi..." value="' + Core.escapeHtml(c.key || "") + '" /></div>' +
-        '<button class="btn ghost small block" onclick="App.saveCloudCfg()">保存云端配置</button>' +
-        '<div class="field" style="margin-top:12px"><label>云账号（手机号 / 邮箱）</label>' +
-          '<input class="input" id="clAccount" placeholder="13800138000 或 you@mail.com" value="' + Core.escapeHtml(c.account || "") + '" /></div>' +
-        '<div class="field"><label>密码（6 位以上）</label>' +
-          '<input class="input" id="clPwd" type="password" placeholder="登录密码" /></div>' +
-        '<div class="btn-row">' +
-          '<button class="btn ghost small" onclick="App.cloudAuth(\'up\')">注册并登录</button>' +
-          '<button class="btn primary small" onclick="App.cloudAuth(\'in\')">登录</button>' +
-        "</div>" +
-        '<div class="muted" style="margin-top:8px">' + account + "</div>" + "</div>" +
-        (session
-          ? '<div class="muted">' + account + "</div>" +
-            '<div class="btn-row" style="margin-top:12px">' +
-              '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
-              '<button class="btn soft small" onclick="App.cloudPullNow()">从云端拉取</button>' +
-              '<button class="btn ghost small" onclick="App.cloudSignOut()">退出云账号</button>' +
-            "</div>" +
-            '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
-              "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传；每 3 分钟拉取一次</div></div>" +
-              '<label class="switch"><input type="checkbox" ' + (c.auto !== false ? "checked" : "") + ' onchange="App.toggleCloudAuto(this.checked)" /><i></i></label>' +
-            "</div>" +
-            '<div class="muted" style="margin-top:8px">上次上传：' + (st.lastPush ? Core.timeAgo(st.lastPush) : "—") +
-              " · 上次拉取：" + (st.lastPull ? Core.timeAgo(st.lastPull) : "—") + "</div>" +
-            (st.error ? '<div class="ar-err">' + Core.escapeHtml(st.error) + "</div>" : "")
-          : "") +
+        '<div class="cloud-head">' + icon("cloud", 15) + "<b>" + (pyq ? "自建云服务器" : "Supabase 云账号") + "</b>" + tag + "</div>" +
+        '<div class="muted" style="margin:6px 0 10px">资料、文案、素材、选题、排期、生成记录全部跟随账号存在云端，退出登录、换设备登录都不会丢。</div>' +
+        authForm +
+        sessionBox +
       "</div>"
     );
   }
@@ -558,18 +582,16 @@
       '<div class="page">' +
         UI.head("AI 模型接入", "文案 / 图片 / 视频 · 支持免费模型", "", true) +
         '<div class="hint" style="margin-bottom:12px">' + icon("shield", 13) +
-          "<span>全部走 OpenAI 兼容协议。推荐走自建后端代理：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥；也可以直接填自己的 Key，只存本机。</span></div>" +
+          "<span>文案与视频统一走自建后端 pyq-server：真实模型 Key 只放在服务器上，App 和网页端都不保存密钥。服务器地址与「账号与云同步」共用同一个，登录云账号后自动带上身份令牌。</span></div>" +
 
         '<div class="card">' +
-          aiSecHead("spark", "文案生成", t.backend ? "后端代理" : (t.base && t.key ? "已接入" : "未配置")) +
-          '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；未配置时自动使用本地模板。</div>' +
+          aiSecHead("spark", "文案生成", "自建后端") +
+          '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；生成前会注入服务器每日学习的「人物画像摘要」，资料没写到的事实不会编造。</div>' +
           aiPresetChips("text") +
-          aiField("aiTextBase", "接口地址 / 代理地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiTextKey", "API Key / 代理令牌", t.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiTextBase", "自建服务器地址（留空则用云同步地址）", t.base, "https://你的服务器地址") +
+          aiField("aiTextKey", "代理访问令牌（一般留空）", t.key, "留空时自动使用云账号登录令牌", "password") +
           aiField("aiTextModel", "模型", t.model || "glm-4-flash", "glm-4-flash") +
-          '<div class="field"><label class="check"><input type="checkbox" id="aiTextBackend" ' + (t.backend ? "checked" : "") +
-            ' onchange="App.aiToggleBackend(\'text\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
-          '<div class="muted" style="margin:0 0 8px">开启后，「接口地址」填代理根地址（如 https://你的域名/v1），令牌可留空；App 与网页版都不会接触模型密钥。</div>' +
+          '<div class="muted" style="margin:0 0 8px">不需要填任何模型厂商 Key；只需服务器上配置好 ZHIPU_API_KEY。</div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'text\')">测试文案模型</button>' +
         "</div>" +
 
@@ -589,14 +611,12 @@
         "</div>" +
 
         '<div class="card mt12">' +
-          aiSecHead("video", "视频生成", vd.backend ? "后端代理" : (vd.base && vd.key ? "已接入" : "未配置")) +
-          '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用。</div>' +
+          aiSecHead("video", "视频生成", "自建后端") +
+          '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用，密钥只在服务器。</div>' +
           aiPresetChips("video") +
-          aiField("aiVideoBase", "接口地址 / 代理地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiVideoKey", "API Key / 代理令牌", vd.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiVideoBase", "自建服务器地址（留空则用云同步地址）", vd.base, "https://你的服务器地址") +
+          aiField("aiVideoKey", "代理访问令牌（一般留空）", vd.key, "留空时自动使用云账号登录令牌", "password") +
           aiField("aiVideoModel", "模型", vd.model || "cogvideox-flash", "cogvideox-flash") +
-          '<div class="field"><label class="check"><input type="checkbox" id="aiVideoBackend" ' + (vd.backend ? "checked" : "") +
-            ' onchange="App.aiToggleBackend(\'video\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
         "</div>" +
 
@@ -627,7 +647,7 @@
       (mod.provider === "zhipu" ? (mod.apiKey ? "云审智谱" : "云审未填 Key") :
       mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "云审腾讯" : "云审未填密钥") :
       mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "云审阿里" : "云审未填密钥") : "云审已开启");
-    return (t.backend ? "文案走代理" : (t.base && t.key ? "文案已接入" : "文案未配置")) + " · " + imgState + (vd.backend ? " · 视频走代理" : (vd.base && vd.key ? " · 视频已接入" : "")) + " · " + modState;
+    return "文案走自建后端 · " + imgState + " · 视频走自建后端 · " + modState;
   }
 
   function renderMore() {
