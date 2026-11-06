@@ -1949,8 +1949,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 27,
-  APP_VERSION_NAME: "1.14.2",
+  APP_VERSION_CODE: 28,
+  APP_VERSION_NAME: "1.14.3",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -2107,10 +2107,11 @@ window.SEED = {
   settings: {
     // AI 模型：统一走 OpenAI 兼容协议，Key 只存本机，不上传任何服务器
     ai: {
-      text: { base: "", key: "", model: "" },
+      // backend: true 时走自建代理，base 填代理地址，key 填代理访问令牌（可空），前端不接触真实模型 Key
+      text: { backend: false, base: "", key: "", model: "" },
       // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
       image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
-      video: { base: "", key: "", model: "cogvideox-flash" },
+      video: { backend: false, base: "", key: "", model: "cogvideox-flash" },
       // 云端媒体审核：默认关闭；zhipu 免费额度最多，tencent/alibaba 需注册
       moderate: { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
     },
@@ -5023,15 +5024,18 @@ window.SEED = {
       '<div class="page">' +
         UI.head("AI 模型接入", "文案 / 图片 / 视频 · 支持免费模型", "", true) +
         '<div class="hint" style="margin-bottom:12px">' + icon("shield", 13) +
-          "<span>全部走 OpenAI 兼容协议，Key 只保存在本机。带「免费」的预设注册后即可领取免费额度；图片免费通道连 Key 都不用填。</span></div>" +
+          "<span>全部走 OpenAI 兼容协议。推荐走自建后端代理：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥；也可以直接填自己的 Key，只存本机。</span></div>" +
 
         '<div class="card">' +
-          aiSecHead("spark", "文案生成", t.base && t.key ? "已接入" : "未配置") +
+          aiSecHead("spark", "文案生成", t.backend ? "后端代理" : (t.base && t.key ? "已接入" : "未配置")) +
           '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；未配置时自动使用本地模板。</div>' +
           aiPresetChips("text") +
-          aiField("aiTextBase", "接口地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiTextKey", "API Key", t.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiTextBase", "接口地址 / 代理地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiTextKey", "API Key / 代理令牌", t.key, "在 bigmodel.cn 控制台获取", "password") +
           aiField("aiTextModel", "模型", t.model || "glm-4-flash", "glm-4-flash") +
+          '<div class="field"><label class="check"><input type="checkbox" id="aiTextBackend" ' + (t.backend ? "checked" : "") +
+            ' onchange="App.aiToggleBackend(\'text\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
+          '<div class="muted" style="margin:0 0 8px">开启后，「接口地址」填代理根地址（如 https://你的域名/v1），令牌可留空；App 与网页版都不会接触模型密钥。</div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'text\')">测试文案模型</button>' +
         "</div>" +
 
@@ -5051,12 +5055,14 @@ window.SEED = {
         "</div>" +
 
         '<div class="card mt12">' +
-          aiSecHead("video", "视频生成", vd.base && vd.key ? "已接入" : "未配置") +
+          aiSecHead("video", "视频生成", vd.backend ? "后端代理" : (vd.base && vd.key ? "已接入" : "未配置")) +
           '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用。</div>' +
           aiPresetChips("video") +
-          aiField("aiVideoBase", "接口地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiVideoKey", "API Key", vd.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiVideoBase", "接口地址 / 代理地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiVideoKey", "API Key / 代理令牌", vd.key, "在 bigmodel.cn 控制台获取", "password") +
           aiField("aiVideoModel", "模型", vd.model || "cogvideox-flash", "cogvideox-flash") +
+          '<div class="field"><label class="check"><input type="checkbox" id="aiVideoBackend" ' + (vd.backend ? "checked" : "") +
+            ' onchange="App.aiToggleBackend(\'video\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
         "</div>" +
 
@@ -5087,7 +5093,7 @@ window.SEED = {
       (mod.provider === "zhipu" ? (mod.apiKey ? "云审智谱" : "云审未填 Key") :
       mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "云审腾讯" : "云审未填密钥") :
       mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "云审阿里" : "云审未填密钥") : "云审已开启");
-    return (t.base && t.key ? "文案已接入" : "文案未配置") + " · " + imgState + (vd.base && vd.key ? " · 视频已接入" : "") + " · " + modState;
+    return (t.backend ? "文案走代理" : (t.base && t.key ? "文案已接入" : "文案未配置")) + " · " + imgState + (vd.backend ? " · 视频走代理" : (vd.base && vd.key ? " · 视频已接入" : "")) + " · " + modState;
   }
 
   function renderMore() {
@@ -7674,6 +7680,7 @@ window.SEED = {
   // 免费 / 常用预设：一键填入接口地址与模型
   const AI_PRESETS = {
     text: [
+      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "glm-4-flash", backend: true },
       { id: "zhipu", name: "智谱 GLM（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
       { id: "siliconflow", name: "硅基流动（送额度）", base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" },
       { id: "custom", name: "自定义兼容接口", base: "", model: "" }
@@ -7684,6 +7691,7 @@ window.SEED = {
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
+      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "cogvideox-flash", backend: true },
       { id: "zhipu", name: "智谱 CogVideoX（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogvideox-flash" },
       { id: "custom", name: "自定义兼容接口", base: "", model: "" }
     ]
@@ -7693,11 +7701,22 @@ window.SEED = {
     if (!store.settings) store.settings = {};
     if (!store.settings.ai) store.settings.ai = {};
     const ai = store.settings.ai;
-    if (!ai.text) ai.text = { base: "", key: "", model: "" };
+    if (!ai.text) ai.text = { backend: false, base: "", key: "", model: "" };
     if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
-    if (!ai.video) ai.video = { base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.video) ai.video = { backend: false, base: "", key: "", model: "cogvideox-flash" };
     if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
     if (!ai.image.mode) ai.image.mode = "free";
+    // 旧版「内置模型」迁移为「自建后端代理」
+    if (ai.text.builtin) {
+      ai.text.backend = true;
+      ai.text.base = ai.text.base || ai.text.proxyUrl || "";
+      ai.text.builtin = false;
+    }
+    if (ai.video.builtin) {
+      ai.video.backend = true;
+      ai.video.base = ai.video.base || ai.video.proxyUrl || "";
+      ai.video.builtin = false;
+    }
     return ai;
   }
 
@@ -7715,29 +7734,30 @@ window.SEED = {
     casual: "口语化，专业感弱一点"
   };
 
-  // 调用 OpenAI 兼容的 chat/completions：App 内走原生 HTTP，网页版回退 fetch
+  // 调用 OpenAI 兼容的 chat/completions：App 内走原生 HTTP，网页版回退 fetch。
+  // 后端代理模式下前端只用代理地址 + 可选访问令牌，真实模型 Key 只在服务端。
   async function aiChat(messages) {
     const c = aiCfg().text;
-    if (!c.base) return { ok: false, error: "未配置文案模型" };
     const model = c.model || "glm-4-flash";
+    if (!c.base) return { ok: false, error: c.backend ? "未配置后端代理地址" : "未配置文案模型" };
+    if (!c.backend && !c.key) return { ok: false, error: "未配置 API Key" };
+    const body = { model: model, messages: messages, temperature: 0.8, stream: false };
     if (window.NativeApp && NativeApp.available() && NativeApp.aiChat) {
       return NativeApp.aiChat(c.base, c.key, model, JSON.stringify(messages));
     }
-    if (!c.key) return { ok: false, error: "未配置 API Key" };
     try {
       const url = c.base.replace(/\/+$/, "") + "/chat/completions";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + c.key },
-        body: JSON.stringify({ model: model, messages: messages, temperature: 0.8, stream: false })
-      });
+      const headers = { "Content-Type": "application/json" };
+      if (c.key) headers["Authorization"] = "Bearer " + c.key;
+      if (c.backend && c.key) headers["X-Pyq-Token"] = c.key;
+      const res = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) });
       const txt = await res.text();
-      if (!res.ok) return { ok: false, error: "接口返回 HTTP " + res.status + "：" + txt.slice(0, 160) };
+      if (!res.ok) return { ok: false, error: (c.backend ? "代理返回" : "接口返回") + " HTTP " + res.status + "：" + txt.slice(0, 160) };
       let data = {};
-      try { data = JSON.parse(txt); } catch (e) { return { ok: false, error: "接口返回格式错误" }; }
+      try { data = JSON.parse(txt); } catch (e) { return { ok: false, error: "返回格式错误" }; }
       const msg = data && data.choices && data.choices[0] && data.choices[0].message;
       const text = (msg && msg.content) || "";
-      if (!text.trim()) return { ok: false, error: "接口没有返回内容" };
+      if (!text.trim()) return { ok: false, error: "没有返回内容" };
       return { ok: true, text: text.trim() };
     } catch (e) {
       return { ok: false, error: "请求失败（网页版可能受跨域限制）：" + ((e && e.message) || e) };
@@ -7827,6 +7847,7 @@ window.SEED = {
   function aiPreset(kind, id) {
     const p = (AI_PRESETS[kind] || []).find((x) => x.id === id);
     if (!p) return;
+    const builtin = !!p.backend;
     if (kind === "image") {
       const mode = document.getElementById("aiImageMode");
       if (mode) mode.value = p.mode;
@@ -7840,12 +7861,33 @@ window.SEED = {
       if (base) base.value = p.base;
       const model = document.getElementById(prefix + "Model");
       if (model) model.value = p.model;
+      const cb = document.getElementById(prefix + "Backend");
+      if (cb) cb.checked = builtin;
+      // 走后端代理时不需要用户自带 Key，代理令牌可留空
+      const keyInput = document.getElementById(prefix + "Key");
+      if (builtin && keyInput) keyInput.value = "";
+      // 切换后更新输入框提示
+      App.aiToggleBackend(kind);
     }
-    toast("已填入「" + p.name + "」，保存后生效");
+    toast("已选「" + p.name + "」，保存后生效");
+  }
+
+  // 切换「后端代理」时更新接口地址 / 令牌的提示
+  function aiToggleBackend(kind) {
+    const prefix = kind === "text" ? "aiText" : "aiVideo";
+    const cb = document.getElementById(prefix + "Backend");
+    const backend = !!(cb && cb.checked);
+    const base = document.getElementById(prefix + "Base");
+    const key = document.getElementById(prefix + "Key");
+    if (base) { base.placeholder = backend ? "https://你的代理域名/v1" : "https://open.bigmodel.cn/api/paas/v4"; }
+    if (key) { key.placeholder = backend ? "代理访问令牌（可留空）" : "在控制台获取"; }
   }
 
   function aiSaveSettings() {
     const ai = aiCfg();
+    const tBackend = document.getElementById("aiTextBackend");
+    const vBackend = document.getElementById("aiVideoBackend");
+    ai.text.backend = !!(tBackend && tBackend.checked);
     ai.text.base = document.getElementById("aiTextBase").value.trim();
     ai.text.key = document.getElementById("aiTextKey").value.trim();
     ai.text.model = document.getElementById("aiTextModel").value.trim();
@@ -7854,6 +7896,7 @@ window.SEED = {
     ai.image.key = document.getElementById("aiImageKey").value.trim();
     ai.image.model = document.getElementById("aiImageModel").value.trim();
     ai.image.size = document.getElementById("aiImageSize").value;
+    ai.video.backend = !!(vBackend && vBackend.checked);
     ai.video.base = document.getElementById("aiVideoBase").value.trim();
     ai.video.key = document.getElementById("aiVideoKey").value.trim();
     ai.video.model = document.getElementById("aiVideoModel").value.trim();
@@ -7885,9 +7928,11 @@ window.SEED = {
       ai.text.base = document.getElementById("aiTextBase").value.trim();
       ai.text.key = document.getElementById("aiTextKey").value.trim();
       ai.text.model = document.getElementById("aiTextModel").value.trim();
+      ai.text.backend = !!(document.getElementById("aiTextBackend") || {}).checked;
       save();
-      if (!ai.text.base || !ai.text.key) { toast("先填接口地址和 API Key"); return; }
-      toast("正在测试文案模型…");
+      if (!ai.text.base) { toast(ai.text.backend ? "先填后端代理地址" : "先填接口地址"); return; }
+      if (!ai.text.backend && !ai.text.key) { toast("先填 API Key"); return; }
+      toast("正在测试" + (ai.text.backend ? "后端代理" : "文案模型") + "…");
       const r = await aiChat([{ role: "user", content: "只回复两个字：你好" }]);
       toast(r && r.ok ? "文案模型连接成功：" + String(r.text || "").slice(0, 20) : "文案模型失败：" + ((r && r.error) || ""));
       return;
@@ -8483,7 +8528,7 @@ window.SEED = {
     if (!prompt) { toast("先写画面描述"); return; }
     const cfg = aiCfg().video;
     if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
-    if (!cfg.base || !cfg.key) { toast("请先在「AI 模型接入」里配置视频模型和 Key"); return; }
+    if (!cfg.base) { toast(cfg.backend ? "请先配置后端代理地址" : "请先在「AI 模型接入」里配置视频模型和 Key"); return; }
 
     const check = Core.checkText(prompt);
     if (!check.passed) {
@@ -8877,7 +8922,7 @@ window.SEED = {
     openSlotSheet, saveSlot, delSlot, confirmDelSlot, genSlotContent, editSlotContent, saveSlotContent,
     setMaterialTab, setMaterialCat, materialToCompose, copyMaterial, copyMaterialText,
     openMaterialAdd, saveMaterial, openImageSheet, generateImage, aiImagePreset,
-    aiPreset, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
+    aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
     saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,

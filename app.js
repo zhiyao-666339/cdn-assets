@@ -806,6 +806,7 @@
   // 免费 / 常用预设：一键填入接口地址与模型
   const AI_PRESETS = {
     text: [
+      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "glm-4-flash", backend: true },
       { id: "zhipu", name: "智谱 GLM（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash" },
       { id: "siliconflow", name: "硅基流动（送额度）", base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" },
       { id: "custom", name: "自定义兼容接口", base: "", model: "" }
@@ -816,6 +817,7 @@
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
+      { id: "backend", name: "自建后端代理（推荐）", base: "", model: "cogvideox-flash", backend: true },
       { id: "zhipu", name: "智谱 CogVideoX（免费）", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogvideox-flash" },
       { id: "custom", name: "自定义兼容接口", base: "", model: "" }
     ]
@@ -825,11 +827,22 @@
     if (!store.settings) store.settings = {};
     if (!store.settings.ai) store.settings.ai = {};
     const ai = store.settings.ai;
-    if (!ai.text) ai.text = { base: "", key: "", model: "" };
+    if (!ai.text) ai.text = { backend: false, base: "", key: "", model: "" };
     if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
-    if (!ai.video) ai.video = { base: "", key: "", model: "cogvideox-flash" };
+    if (!ai.video) ai.video = { backend: false, base: "", key: "", model: "cogvideox-flash" };
     if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
     if (!ai.image.mode) ai.image.mode = "free";
+    // 旧版「内置模型」迁移为「自建后端代理」
+    if (ai.text.builtin) {
+      ai.text.backend = true;
+      ai.text.base = ai.text.base || ai.text.proxyUrl || "";
+      ai.text.builtin = false;
+    }
+    if (ai.video.builtin) {
+      ai.video.backend = true;
+      ai.video.base = ai.video.base || ai.video.proxyUrl || "";
+      ai.video.builtin = false;
+    }
     return ai;
   }
 
@@ -847,29 +860,30 @@
     casual: "口语化，专业感弱一点"
   };
 
-  // 调用 OpenAI 兼容的 chat/completions：App 内走原生 HTTP，网页版回退 fetch
+  // 调用 OpenAI 兼容的 chat/completions：App 内走原生 HTTP，网页版回退 fetch。
+  // 后端代理模式下前端只用代理地址 + 可选访问令牌，真实模型 Key 只在服务端。
   async function aiChat(messages) {
     const c = aiCfg().text;
-    if (!c.base) return { ok: false, error: "未配置文案模型" };
     const model = c.model || "glm-4-flash";
+    if (!c.base) return { ok: false, error: c.backend ? "未配置后端代理地址" : "未配置文案模型" };
+    if (!c.backend && !c.key) return { ok: false, error: "未配置 API Key" };
+    const body = { model: model, messages: messages, temperature: 0.8, stream: false };
     if (window.NativeApp && NativeApp.available() && NativeApp.aiChat) {
       return NativeApp.aiChat(c.base, c.key, model, JSON.stringify(messages));
     }
-    if (!c.key) return { ok: false, error: "未配置 API Key" };
     try {
       const url = c.base.replace(/\/+$/, "") + "/chat/completions";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + c.key },
-        body: JSON.stringify({ model: model, messages: messages, temperature: 0.8, stream: false })
-      });
+      const headers = { "Content-Type": "application/json" };
+      if (c.key) headers["Authorization"] = "Bearer " + c.key;
+      if (c.backend && c.key) headers["X-Pyq-Token"] = c.key;
+      const res = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) });
       const txt = await res.text();
-      if (!res.ok) return { ok: false, error: "接口返回 HTTP " + res.status + "：" + txt.slice(0, 160) };
+      if (!res.ok) return { ok: false, error: (c.backend ? "代理返回" : "接口返回") + " HTTP " + res.status + "：" + txt.slice(0, 160) };
       let data = {};
-      try { data = JSON.parse(txt); } catch (e) { return { ok: false, error: "接口返回格式错误" }; }
+      try { data = JSON.parse(txt); } catch (e) { return { ok: false, error: "返回格式错误" }; }
       const msg = data && data.choices && data.choices[0] && data.choices[0].message;
       const text = (msg && msg.content) || "";
-      if (!text.trim()) return { ok: false, error: "接口没有返回内容" };
+      if (!text.trim()) return { ok: false, error: "没有返回内容" };
       return { ok: true, text: text.trim() };
     } catch (e) {
       return { ok: false, error: "请求失败（网页版可能受跨域限制）：" + ((e && e.message) || e) };
@@ -959,6 +973,7 @@
   function aiPreset(kind, id) {
     const p = (AI_PRESETS[kind] || []).find((x) => x.id === id);
     if (!p) return;
+    const builtin = !!p.backend;
     if (kind === "image") {
       const mode = document.getElementById("aiImageMode");
       if (mode) mode.value = p.mode;
@@ -972,12 +987,33 @@
       if (base) base.value = p.base;
       const model = document.getElementById(prefix + "Model");
       if (model) model.value = p.model;
+      const cb = document.getElementById(prefix + "Backend");
+      if (cb) cb.checked = builtin;
+      // 走后端代理时不需要用户自带 Key，代理令牌可留空
+      const keyInput = document.getElementById(prefix + "Key");
+      if (builtin && keyInput) keyInput.value = "";
+      // 切换后更新输入框提示
+      App.aiToggleBackend(kind);
     }
-    toast("已填入「" + p.name + "」，保存后生效");
+    toast("已选「" + p.name + "」，保存后生效");
+  }
+
+  // 切换「后端代理」时更新接口地址 / 令牌的提示
+  function aiToggleBackend(kind) {
+    const prefix = kind === "text" ? "aiText" : "aiVideo";
+    const cb = document.getElementById(prefix + "Backend");
+    const backend = !!(cb && cb.checked);
+    const base = document.getElementById(prefix + "Base");
+    const key = document.getElementById(prefix + "Key");
+    if (base) { base.placeholder = backend ? "https://你的代理域名/v1" : "https://open.bigmodel.cn/api/paas/v4"; }
+    if (key) { key.placeholder = backend ? "代理访问令牌（可留空）" : "在控制台获取"; }
   }
 
   function aiSaveSettings() {
     const ai = aiCfg();
+    const tBackend = document.getElementById("aiTextBackend");
+    const vBackend = document.getElementById("aiVideoBackend");
+    ai.text.backend = !!(tBackend && tBackend.checked);
     ai.text.base = document.getElementById("aiTextBase").value.trim();
     ai.text.key = document.getElementById("aiTextKey").value.trim();
     ai.text.model = document.getElementById("aiTextModel").value.trim();
@@ -986,6 +1022,7 @@
     ai.image.key = document.getElementById("aiImageKey").value.trim();
     ai.image.model = document.getElementById("aiImageModel").value.trim();
     ai.image.size = document.getElementById("aiImageSize").value;
+    ai.video.backend = !!(vBackend && vBackend.checked);
     ai.video.base = document.getElementById("aiVideoBase").value.trim();
     ai.video.key = document.getElementById("aiVideoKey").value.trim();
     ai.video.model = document.getElementById("aiVideoModel").value.trim();
@@ -1017,9 +1054,11 @@
       ai.text.base = document.getElementById("aiTextBase").value.trim();
       ai.text.key = document.getElementById("aiTextKey").value.trim();
       ai.text.model = document.getElementById("aiTextModel").value.trim();
+      ai.text.backend = !!(document.getElementById("aiTextBackend") || {}).checked;
       save();
-      if (!ai.text.base || !ai.text.key) { toast("先填接口地址和 API Key"); return; }
-      toast("正在测试文案模型…");
+      if (!ai.text.base) { toast(ai.text.backend ? "先填后端代理地址" : "先填接口地址"); return; }
+      if (!ai.text.backend && !ai.text.key) { toast("先填 API Key"); return; }
+      toast("正在测试" + (ai.text.backend ? "后端代理" : "文案模型") + "…");
       const r = await aiChat([{ role: "user", content: "只回复两个字：你好" }]);
       toast(r && r.ok ? "文案模型连接成功：" + String(r.text || "").slice(0, 20) : "文案模型失败：" + ((r && r.error) || ""));
       return;
@@ -1615,7 +1654,7 @@
     if (!prompt) { toast("先写画面描述"); return; }
     const cfg = aiCfg().video;
     if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
-    if (!cfg.base || !cfg.key) { toast("请先在「AI 模型接入」里配置视频模型和 Key"); return; }
+    if (!cfg.base) { toast(cfg.backend ? "请先配置后端代理地址" : "请先在「AI 模型接入」里配置视频模型和 Key"); return; }
 
     const check = Core.checkText(prompt);
     if (!check.passed) {
@@ -2009,7 +2048,7 @@
     openSlotSheet, saveSlot, delSlot, confirmDelSlot, genSlotContent, editSlotContent, saveSlotContent,
     setMaterialTab, setMaterialCat, materialToCompose, copyMaterial, copyMaterialText,
     openMaterialAdd, saveMaterial, openImageSheet, generateImage, aiImagePreset,
-    aiPreset, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
+    aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
     saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto,

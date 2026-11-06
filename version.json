@@ -1,20 +1,20 @@
 {
   "schema": 2,
-  "versionCode": 27,
-  "versionName": "1.14.2",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.2.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.2.apk",
-  "size": 2617700,
-  "md5": "730a04a6d21a107c67e4e2db060094c8",
+  "versionCode": 28,
+  "versionName": "1.14.3",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.3.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.3.apk",
+  "size": 2618760,
+  "md5": "c9afb3966ad2ad0856117acabb3d2dd7",
   "notes": [
-    "修复：已开通会员从会员中心点「已有激活码」，弹层无法关闭、返回后卡在档位页",
-    "收紧开发者工具：会员中心不再显示入口，改为连点 VIP 徽章 5 次进入；激活码生成密码改为独立密码，不再使用公开微信号",
-    "激活码仍与手机号 + 档位绑定，输入后立即开通并写入本机"
+    "AI 接入改为「自建后端代理」：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥",
+    "文案 / 视频 / 图片生成统一走代理，前端只填代理地址与可选访问令牌",
+    "云端内容审核同样支持走该代理的 /moderate 接口"
   ],
-  "webBuild": 27,
-  "webName": "1.14.2",
+  "webBuild": 28,
+  "webName": "1.14.3",
   "webNotes": [
-    "修复：已开通会员进入激活码页后弹层关不掉的问题",
-    "收紧：开发者激活码生成入口改为隐藏手势，密码与公开微信号分离"
+    "AI 接入改为「自建后端代理」，网页版填写代理地址即可使用，不再需要在前端保存 API Key",
+    "代理地址同时用于云端审核，密钥不出服务器"
   ]
 }

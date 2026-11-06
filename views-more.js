@@ -558,15 +558,18 @@
       '<div class="page">' +
         UI.head("AI 模型接入", "文案 / 图片 / 视频 · 支持免费模型", "", true) +
         '<div class="hint" style="margin-bottom:12px">' + icon("shield", 13) +
-          "<span>全部走 OpenAI 兼容协议，Key 只保存在本机。带「免费」的预设注册后即可领取免费额度；图片免费通道连 Key 都不用填。</span></div>" +
+          "<span>全部走 OpenAI 兼容协议。推荐走自建后端代理：真实模型 Key 只放在你的服务器上，App 和网页端都不保存密钥；也可以直接填自己的 Key，只存本机。</span></div>" +
 
         '<div class="card">' +
-          aiSecHead("spark", "文案生成", t.base && t.key ? "已接入" : "未配置") +
+          aiSecHead("spark", "文案生成", t.backend ? "后端代理" : (t.base && t.key ? "已接入" : "未配置")) +
           '<div class="muted" style="margin:0 0 8px">用于「创作」页的 AI 生成与润色；未配置时自动使用本地模板。</div>' +
           aiPresetChips("text") +
-          aiField("aiTextBase", "接口地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiTextKey", "API Key", t.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiTextBase", "接口地址 / 代理地址", t.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiTextKey", "API Key / 代理令牌", t.key, "在 bigmodel.cn 控制台获取", "password") +
           aiField("aiTextModel", "模型", t.model || "glm-4-flash", "glm-4-flash") +
+          '<div class="field"><label class="check"><input type="checkbox" id="aiTextBackend" ' + (t.backend ? "checked" : "") +
+            ' onchange="App.aiToggleBackend(\'text\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
+          '<div class="muted" style="margin:0 0 8px">开启后，「接口地址」填代理根地址（如 https://你的域名/v1），令牌可留空；App 与网页版都不会接触模型密钥。</div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'text\')">测试文案模型</button>' +
         "</div>" +
 
@@ -586,12 +589,14 @@
         "</div>" +
 
         '<div class="card mt12">' +
-          aiSecHead("video", "视频生成", vd.base && vd.key ? "已接入" : "未配置") +
+          aiSecHead("video", "视频生成", vd.backend ? "后端代理" : (vd.base && vd.key ? "已接入" : "未配置")) +
           '<div class="muted" style="margin:0 0 8px">使用智谱 CogVideoX 免费模型，异步生成，约 1-3 分钟；需在 App 内使用。</div>' +
           aiPresetChips("video") +
-          aiField("aiVideoBase", "接口地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
-          aiField("aiVideoKey", "API Key", vd.key, "在 bigmodel.cn 控制台获取", "password") +
+          aiField("aiVideoBase", "接口地址 / 代理地址", vd.base, "https://open.bigmodel.cn/api/paas/v4") +
+          aiField("aiVideoKey", "API Key / 代理令牌", vd.key, "在 bigmodel.cn 控制台获取", "password") +
           aiField("aiVideoModel", "模型", vd.model || "cogvideox-flash", "cogvideox-flash") +
+          '<div class="field"><label class="check"><input type="checkbox" id="aiVideoBackend" ' + (vd.backend ? "checked" : "") +
+            ' onchange="App.aiToggleBackend(\'video\')" /> 走自建后端代理（真实 Key 只在你的服务器上）</label></div>' +
           '<button class="btn soft block" onclick="App.aiTest(\'video\')">检查视频配置</button>' +
         "</div>" +
 
@@ -622,7 +627,7 @@
       (mod.provider === "zhipu" ? (mod.apiKey ? "云审智谱" : "云审未填 Key") :
       mod.provider === "tencent" ? ((mod.secretId && mod.secretKey) ? "云审腾讯" : "云审未填密钥") :
       mod.provider === "alibaba" ? ((mod.secretId && mod.secretKey) ? "云审阿里" : "云审未填密钥") : "云审已开启");
-    return (t.base && t.key ? "文案已接入" : "文案未配置") + " · " + imgState + (vd.base && vd.key ? " · 视频已接入" : "") + " · " + modState;
+    return (t.backend ? "文案走代理" : (t.base && t.key ? "文案已接入" : "文案未配置")) + " · " + imgState + (vd.backend ? " · 视频走代理" : (vd.base && vd.key ? " · 视频已接入" : "")) + " · " + modState;
   }
 
   function renderMore() {
