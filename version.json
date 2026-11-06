@@ -4,8 +4,8 @@
   "versionName": "1.14.4",
   "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.4.apk",
   "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.4.apk",
-  "size": 2738929,
-  "md5": "dbd22316674d7735ec582c4aab0921ed",
+  "size": 2741641,
+  "md5": "d19f725146957604911d42f73fec2d81",
   "notes": [
     "账号与资料并入自建后端 pyq-server：手机号/邮箱 + 密码登录，资料、文案、素材、历史、生成记录整包存云服务器",
     "退出登录或换设备后，登录同一账号即可自动恢复全部资料",

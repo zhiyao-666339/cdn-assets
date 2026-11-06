@@ -394,7 +394,7 @@
         '<div class="btn-row" style="margin-top:12px">' +
           '<button class="btn soft small" onclick="App.cloudPushNow()">立即上传</button>' +
           '<button class="btn soft small" onclick="App.cloudPullNow()">从云端恢复</button>' +
-          '<button class="btn ghost small" onclick="App.cloudSignOut()">退出账号</button>' +
+          '<button class="btn ghost small" onclick="App.cloudSignOut()">退出云账号</button>' +
         "</div>" +
         '<div class="card" style="box-shadow:none;margin-top:10px;display:flex;align-items:center;justify-content:space-between">' +
           "<div><b style=\"font-size:13px\">自动同步</b><div class=\"muted\">保存后 2 秒自动上传</div></div>" +
