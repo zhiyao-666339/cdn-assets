@@ -295,7 +295,7 @@
     }
     save();
     queueArtifact(c, item);
-    toast("已保存并归档到飞书云盘");
+    toast("已保存并同步到云端");
     render();
   }
 
@@ -529,7 +529,7 @@
     queueItem("选题库", t.id + "_" + dir + ".txt", "方向：" + dir + "\n\n选题：" + title);
     closeSheet();
     render();
-    toast("选题已保存并归档");
+    toast("选题已保存并同步到云端");
   }
 
   /* 切换选题库范围：全部 / 今日 */
@@ -2097,7 +2097,7 @@
     setHistoryTab, setLogsTab, setCheckInput, runCheck, checkFix,
     refreshRules: (force) => loadLiveRules(force),
     closeSheet, openSheet,
-    syncNow: () => syncNow(), toggleAutoSync: (v) => { ui.sync.auto = v; persistSync(); toast(v ? "已开启自动归档" : "已关闭自动归档"); },
+    syncNow: () => syncNow(), toggleAutoSync: (v) => { ui.sync.auto = v; persistSync(); toast(v ? "已开启自动同步" : "已关闭自动同步"); },
     flushSync: () => flushSync(),
     // 独立 App 专用
     nativeMode: () => !!(window.NativeApp && NativeApp.available()),
@@ -2169,10 +2169,10 @@
     }
   };
 
-  /* ---------- 本地归档（不上传任何服务器） ---------- */
+  /* ---------- 云端同步 + 飞书云盘备份（本机归档已移除） ---------- */
   function queueItem(folder, name, content, encoding) {
-    ui.sync.pending.push({ folder: folder, name: name, content: content, encoding: encoding || "utf8" });
-    persistSync();
+    // 内容已通过 Core.save 实时写入本地并由 Cloud 防抖上传云服务器；
+    // 服务器每天 0 点自动备份到飞书云盘，这里不再写本机目录。
     if (ui.sync.auto) flushSync();
   }
 
@@ -2247,28 +2247,20 @@
   }
 
   async function flushSync() {
-    if (!ui.sync.pending.length || ui.sync.state === "busy") return;
+    if (ui.sync.state === "busy") return;
+    if (!(window.Cloud && Cloud.hasSession && Cloud.hasSession())) return; // 未登录云账号时只存本地，登录后自动补传
     ui.sync.state = "busy";
     if (ui.page === "sync") render();
     try {
-      if (!(window.NativeApp && NativeApp.available())) {
-        ui.sync.state = "error";
-        ui.sync.error = "本地归档只在 App 内可用，网页版无法写入手机存储。";
-        persistSync();
-        if (ui.page === "sync") render();
-        return;
-      }
-      const nac = await NativeApp.sync(ui.sync.pending);
-      if (!nac || !nac.ok) throw new Error((nac && nac.error) || "归档失败");
-      ui.sync.pending = [];
+      const r = await Cloud.push(true);
+      if (!r || !r.ok) throw new Error((r && r.error) || "同步失败");
       ui.sync.state = "ok";
       ui.sync.last = nowISO();
-      ui.sync.synced = nac.synced || 0;
+      ui.sync.synced = 1;
       ui.sync.error = "";
-      toast("已归档 " + (nac.synced || 0) + " 个文件到本机");
     } catch (e) {
       ui.sync.state = "error";
-      ui.sync.error = "归档失败：" + ((e && e.message) || "未知错误") + "，内容会留在待归档队列，可稍后重试。";
+      ui.sync.error = "同步失败：" + ((e && e.message) || "未知错误") + "，内容已保存在本地，联网后会自动重试。";
     }
     persistSync();
     if (ui.page === "sync") render();
@@ -2276,12 +2268,27 @@
 
   async function syncNow() {
     if (ui.sync.state === "busy") return;
-    if (!ui.sync.pending.length) ui.sync.pending = buildAllItems();
-    await flushSync();
-    if (ui.sync.state === "ok") {
-      Core.logAudit("archive", "create", "本机归档", "已归档 " + (ui.sync.synced || 0) + " 个文件");
-      render();
+    if (!(window.Cloud && Cloud.hasSession && Cloud.hasSession())) {
+      toast("请先登录云账号，再同步到云端");
+      ui.sync.error = "请先登录云账号";
+      if (ui.page === "sync") render();
+      return;
     }
+    ui.sync.state = "busy";
+    if (ui.page === "sync") render();
+    const r = await Cloud.push(false);
+    if (r && r.ok) {
+      ui.sync.state = "ok";
+      ui.sync.last = nowISO();
+      ui.sync.synced = 1;
+      ui.sync.error = "";
+      Core.logAudit("sync", "create", "云端同步", "已同步到云服务器，服务器每日 0 点自动备份到飞书云盘");
+    } else {
+      ui.sync.state = "error";
+      ui.sync.error = "同步失败：" + ((r && r.error) || "未知错误");
+    }
+    persistSync();
+    render();
   }
 
   function persistSync() {

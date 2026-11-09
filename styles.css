@@ -815,8 +815,8 @@ img.hist-media { cursor: pointer; }
   display: flex; align-items: center; justify-content: center;
   flex: 0 0 auto;
 }
-.menu-item b { font-size: 13.5px; font-weight: 500; flex: 1; }
-.menu-item span { font-size: 11px; color: #A9AEB5; }
+.menu-item b { font-size: 13.5px; font-weight: 500; flex: 0 0 auto; white-space: nowrap; margin-right: 8px; }
+.menu-item span { font-size: 11px; color: #A9AEB5; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-item svg { color: #C6CAD0; }
 
 /* ---------- 同步 ---------- */

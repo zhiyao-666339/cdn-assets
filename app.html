@@ -1044,8 +1044,8 @@ img.hist-media { cursor: pointer; }
   display: flex; align-items: center; justify-content: center;
   flex: 0 0 auto;
 }
-.menu-item b { font-size: 13.5px; font-weight: 500; flex: 1; }
-.menu-item span { font-size: 11px; color: #A9AEB5; }
+.menu-item b { font-size: 13.5px; font-weight: 500; flex: 0 0 auto; white-space: nowrap; margin-right: 8px; }
+.menu-item span { font-size: 11px; color: #A9AEB5; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-item svg { color: #C6CAD0; }
 
 /* ---------- 同步 ---------- */
@@ -4227,7 +4227,7 @@ window.SEED = {
     }
     return '<div class="btn-row" style="margin-top:14px">' +
         '<button class="btn primary" onclick="App.copy()">' + icon("copy", 16) + "复制全文</button>" +
-        '<button class="btn ghost" onclick="App.saveDraft()">' + icon("save", 16) + "保存并归档</button>" +
+        '<button class="btn ghost" onclick="App.saveDraft()">' + icon("save", 16) + "保存草稿</button>" +
       "</div>" +
       '<div class="btn-row" style="margin-top:8px">' +
         '<button class="btn soft small" onclick="App.toMaterials()">存入素材库</button>' +
@@ -4886,17 +4886,17 @@ window.SEED = {
     );
   }
 
-  /* ---------- 本地归档（已取消飞书云盘同步） ---------- */
+  /* ---------- 云端同步 + 飞书云盘备份 ---------- */
   function renderSync() {
     const sync = ui.sync || {};
-    const pending = (sync.pending || []).length;
-    const stateText = sync.state === "busy" ? "归档中" : "本机归档";
+    const loggedIn = !!(window.Cloud && Cloud.hasSession && Cloud.hasSession());
+    const stateText = sync.state === "busy" ? "同步中" : loggedIn ? "云端同步已开启" : "未登录云账号";
     const dot = sync.state === "busy" ? "busy" : "";
 
     const maps = [
       ["个人资料库预设", "7 个资料文件"],
       ["文案创作", "8 类型 × AI 生成 / 自由创作"],
-      ["选题库", "选题自动归档"],
+      ["选题库", "选题自动同步"],
       ["素材库", "文案 / 图片 / 视频"],
       ["历史生成记录", "生成 + 违规拦截记录"],
       ["发布时间排期", "每日排期表"],
@@ -4905,57 +4905,52 @@ window.SEED = {
 
     const nativeMode = !!(window.NativeApp && NativeApp.available());
 
-    // 存储位置：把三类内容的实际路径摊开，并提供一键导出（归档原本在私有目录，手机上看不到）
+    // 存储位置：图片/视频仍进手机相册，其余内容全部存云服务器并每日备份到飞书云盘
     const storageCard = nativeMode
       ? '<div class="section-title"><h2>内容存放位置</h2><span>手机上查看</span></div>' +
         '<div class="card">' +
           '<div class="map-row"><span>图片</span><em>内部存储 / Pictures / 朋友圈AI助手</em></div>' +
           '<div class="map-row"><span>视频</span><em>内部存储 / Movies / 朋友圈AI助手</em></div>' +
-          '<div class="map-row"><span>文案归档</span><em>App 私有目录（手机上无法直接打开）</em></div>' +
-          '<div class="muted" style="margin-top:8px">图片和视频已写入系统相册，打开「图库」即可看到「朋友圈AI助手」相册。文案/选题/排期保存在 App 私有目录，需点下方按钮导出到公共目录后才能用文件管理器查看。</div>' +
-          '<button class="btn ghost block mt12" onclick="App.exportArchive()">导出归档到手机（Documents）</button>' +
-          '<div class="server-test" id="exportResult" style="display:none"></div>' +
+          '<div class="map-row"><span>文案 / 资料 / 记录</span><em>云服务器（跟随账号，换设备不丢）</em></div>' +
+          '<div class="muted" style="margin-top:8px">图片和视频已写入系统相册，打开「图库」即可看到「朋友圈AI助手」相册。文案、资料、选题、排期、生成记录全部保存在云服务器，并由服务器每天 0 点自动备份到飞书云盘。</div>' +
         "</div>"
       : "";
 
     return (
       '<div class="page">' +
-        UI.head("云同步与本地归档", "跨版本同步 / 本机备份", "", true) +
+        UI.head("云同步与飞书备份", "资料跟随账号 · 每日自动备份", "", true) +
         cloudCard() +
-        '<div class="section-title"><h2>本机归档</h2><span>' + stateText + "</span></div>" +
+        '<div class="section-title"><h2>云端同步</h2><span>' + stateText + "</span></div>" +
         '<div class="sync-hero">' +
           '<div class="sync-top"><i class="sync-dot ' + dot + '"></i><span>' + stateText + "</span>" +
-            '<span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.5)">' + (sync.last ? "上次 " + Core.timeAgo(sync.last) : "尚未归档") + "</span>" +
+            '<span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.5)">' + (sync.last ? "上次 " + Core.timeAgo(sync.last) : "尚未同步") + "</span>" +
           "</div>" +
-          '<div class="sync-path">📁 本机 App 目录 / 归档</div>' +
+          '<div class="sync-path">☁️ 云服务器 + 飞书云盘（每日 0 点自动备份）</div>' +
           '<div class="sync-nums">' +
-            '<div><b>' + (sync.synced || 0) + '</b><span>本次已归档</span></div>' +
-            '<div><b>' + pending + '</b><span>待归档</span></div>' +
+            '<div><b>' + (sync.synced || 0) + '</b><span>本次已同步</span></div>' +
             '<div><b>' + store.history.length + '</b><span>历史记录</span></div>' +
+            '<div><b>' + store.drafts.length + '</b><span>草稿</span></div>' +
           "</div>" +
         "</div>" +
 
         (nativeMode
           ? '<div class="card mt12" style="display:flex;align-items:center;justify-content:space-between">' +
-              '<div><b style="font-size:13.5px">保存后自动归档</b><div class="muted">生成、保存、改资料时自动写入本机</div></div>' +
+              '<div><b style="font-size:13.5px">保存后自动同步</b><div class="muted">生成、保存、改资料时自动上传到云服务器</div></div>' +
               '<label class="switch"><input type="checkbox" ' + (sync.auto ? "checked" : "") + ' onchange="App.toggleAutoSync(this.checked)" /><i></i></label>' +
             "</div>" +
             '<button class="btn primary block mt12" onclick="App.syncNow()">' + icon("cloud", 17) +
-              (sync.state === "busy" ? "正在归档…" : "立即归档到本机") + "</button>"
+              (sync.state === "busy" ? "正在同步…" : "立即同步到云端") + "</button>"
           : '<div class="card mt12"><b style="font-size:13.5px">网页版自动保存</b>' +
-              '<div class="muted" style="margin-top:4px">内容实时保存在浏览器；登录云账号后与 App 版互通，无需本机归档。</div></div>') +
+              '<div class="muted" style="margin-top:4px">内容实时保存在浏览器；登录云账号后自动上传到云服务器，与 App 版互通。</div></div>') +
 
-        (nativeMode && sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '归档未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
+        (sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '同步未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
 
         storageCard +
 
-        '<div class="section-title"><h2>本机归档目录</h2><span>与方案一致</span></div>' +
+        '<div class="section-title"><h2>同步内容目录</h2><span>与飞书云盘一致</span></div>' +
         '<div class="card">' + maps + "</div>" +
         '<div class="hint">' + icon("cloud", 14) +
-          "<span>" + (nativeMode
-            ? "内容默认保存在本机；登录云账号后会自动上传到你的 Supabase，与网页版互通。图片/视频进手机相册，文案/选题/排期归档到 App 私有目录，需要查看时点上方按钮导出到 Documents。"
-            : "网页版内容保存在浏览器本地；登录云账号后，资料、文案、素材、选题、排期会与 App 版自动互通。") +
-          "</span>" +
+          "<span>所有资料跟随账号保存在云服务器，登录任意设备都能恢复；服务器每天 0 点把全部数据打包备份到飞书云盘，双重保障不丢数据。</span>" +
         "</div>" +
       "</div>"
     );
@@ -5132,7 +5127,7 @@ window.SEED = {
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
       ["ai", "spark", "#F2F0FF", "#7A5AF8", "AI 模型接入", aiMenuNote()],
       ["schedule", "calendar", "#FFF5E9", "#FF9F43", "发布时间排期", store.slots.length + " 个时段"],
-      ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与归档", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
+      ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与备份", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
       ["update", "refresh", "#F0F1F5", "#4E5969", "检查更新", updateMenuNote()],
       ["contact", "user", "#F2F0FF", "#7A5AF8", "联系开发者", "微信号 " + (window.Auth ? Auth.wxId : "zhiyao0a1")]
     ].map(([page, ic, bg, color, label, note]) =>
@@ -6192,10 +6187,10 @@ window.SEED = {
   const DEV_PWD = "PYQ-DEV-2026";
 
   const TIERS = [
-    { tier: 1, name: "月会员", price: 9.9, days: 30, tag: "灵活体验" },
-    { tier: 2, name: "季度会员", price: 19.9, days: 90, tag: "省 33%" },
-    { tier: 3, name: "年度会员", price: 59.9, days: 365, tag: "最划算" },
-    { tier: 4, name: "二年会员", price: 99, days: 730, tag: "一次买断" }
+    { tier: 1, name: "月度会员", price: 19.9, days: 30, tag: "灵活体验" },
+    { tier: 2, name: "季度会员", price: 39.9, days: 90, tag: "90 天畅用" },
+    { tier: 3, name: "半年会员", price: 59.9, days: 180, tag: "半年省心" },
+    { tier: 4, name: "年度会员", price: 99.9, days: 365, tag: "最划算" }
   ];
 
   let seq = 0;
@@ -7395,7 +7390,7 @@ window.SEED = {
     }
     save();
     queueArtifact(c, item);
-    toast("已保存并归档到飞书云盘");
+    toast("已保存并同步到云端");
     render();
   }
 
@@ -7629,7 +7624,7 @@ window.SEED = {
     queueItem("选题库", t.id + "_" + dir + ".txt", "方向：" + dir + "\n\n选题：" + title);
     closeSheet();
     render();
-    toast("选题已保存并归档");
+    toast("选题已保存并同步到云端");
   }
 
   /* 切换选题库范围：全部 / 今日 */
@@ -9197,7 +9192,7 @@ window.SEED = {
     setHistoryTab, setLogsTab, setCheckInput, runCheck, checkFix,
     refreshRules: (force) => loadLiveRules(force),
     closeSheet, openSheet,
-    syncNow: () => syncNow(), toggleAutoSync: (v) => { ui.sync.auto = v; persistSync(); toast(v ? "已开启自动归档" : "已关闭自动归档"); },
+    syncNow: () => syncNow(), toggleAutoSync: (v) => { ui.sync.auto = v; persistSync(); toast(v ? "已开启自动同步" : "已关闭自动同步"); },
     flushSync: () => flushSync(),
     // 独立 App 专用
     nativeMode: () => !!(window.NativeApp && NativeApp.available()),
@@ -9269,10 +9264,10 @@ window.SEED = {
     }
   };
 
-  /* ---------- 本地归档（不上传任何服务器） ---------- */
+  /* ---------- 云端同步 + 飞书云盘备份（本机归档已移除） ---------- */
   function queueItem(folder, name, content, encoding) {
-    ui.sync.pending.push({ folder: folder, name: name, content: content, encoding: encoding || "utf8" });
-    persistSync();
+    // 内容已通过 Core.save 实时写入本地并由 Cloud 防抖上传云服务器；
+    // 服务器每天 0 点自动备份到飞书云盘，这里不再写本机目录。
     if (ui.sync.auto) flushSync();
   }
 
@@ -9347,28 +9342,20 @@ window.SEED = {
   }
 
   async function flushSync() {
-    if (!ui.sync.pending.length || ui.sync.state === "busy") return;
+    if (ui.sync.state === "busy") return;
+    if (!(window.Cloud && Cloud.hasSession && Cloud.hasSession())) return; // 未登录云账号时只存本地，登录后自动补传
     ui.sync.state = "busy";
     if (ui.page === "sync") render();
     try {
-      if (!(window.NativeApp && NativeApp.available())) {
-        ui.sync.state = "error";
-        ui.sync.error = "本地归档只在 App 内可用，网页版无法写入手机存储。";
-        persistSync();
-        if (ui.page === "sync") render();
-        return;
-      }
-      const nac = await NativeApp.sync(ui.sync.pending);
-      if (!nac || !nac.ok) throw new Error((nac && nac.error) || "归档失败");
-      ui.sync.pending = [];
+      const r = await Cloud.push(true);
+      if (!r || !r.ok) throw new Error((r && r.error) || "同步失败");
       ui.sync.state = "ok";
       ui.sync.last = nowISO();
-      ui.sync.synced = nac.synced || 0;
+      ui.sync.synced = 1;
       ui.sync.error = "";
-      toast("已归档 " + (nac.synced || 0) + " 个文件到本机");
     } catch (e) {
       ui.sync.state = "error";
-      ui.sync.error = "归档失败：" + ((e && e.message) || "未知错误") + "，内容会留在待归档队列，可稍后重试。";
+      ui.sync.error = "同步失败：" + ((e && e.message) || "未知错误") + "，内容已保存在本地，联网后会自动重试。";
     }
     persistSync();
     if (ui.page === "sync") render();
@@ -9376,12 +9363,27 @@ window.SEED = {
 
   async function syncNow() {
     if (ui.sync.state === "busy") return;
-    if (!ui.sync.pending.length) ui.sync.pending = buildAllItems();
-    await flushSync();
-    if (ui.sync.state === "ok") {
-      Core.logAudit("archive", "create", "本机归档", "已归档 " + (ui.sync.synced || 0) + " 个文件");
-      render();
+    if (!(window.Cloud && Cloud.hasSession && Cloud.hasSession())) {
+      toast("请先登录云账号，再同步到云端");
+      ui.sync.error = "请先登录云账号";
+      if (ui.page === "sync") render();
+      return;
     }
+    ui.sync.state = "busy";
+    if (ui.page === "sync") render();
+    const r = await Cloud.push(false);
+    if (r && r.ok) {
+      ui.sync.state = "ok";
+      ui.sync.last = nowISO();
+      ui.sync.synced = 1;
+      ui.sync.error = "";
+      Core.logAudit("sync", "create", "云端同步", "已同步到云服务器，服务器每日 0 点自动备份到飞书云盘");
+    } else {
+      ui.sync.state = "error";
+      ui.sync.error = "同步失败：" + ((r && r.error) || "未知错误");
+    }
+    persistSync();
+    render();
   }
 
   function persistSync() {

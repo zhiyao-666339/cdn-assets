@@ -183,7 +183,7 @@
     }
     return '<div class="btn-row" style="margin-top:14px">' +
         '<button class="btn primary" onclick="App.copy()">' + icon("copy", 16) + "复制全文</button>" +
-        '<button class="btn ghost" onclick="App.saveDraft()">' + icon("save", 16) + "保存并归档</button>" +
+        '<button class="btn ghost" onclick="App.saveDraft()">' + icon("save", 16) + "保存草稿</button>" +
       "</div>" +
       '<div class="btn-row" style="margin-top:8px">' +
         '<button class="btn soft small" onclick="App.toMaterials()">存入素材库</button>' +

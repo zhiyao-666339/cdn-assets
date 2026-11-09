@@ -416,17 +416,17 @@
     );
   }
 
-  /* ---------- 本地归档（已取消飞书云盘同步） ---------- */
+  /* ---------- 云端同步 + 飞书云盘备份 ---------- */
   function renderSync() {
     const sync = ui.sync || {};
-    const pending = (sync.pending || []).length;
-    const stateText = sync.state === "busy" ? "归档中" : "本机归档";
+    const loggedIn = !!(window.Cloud && Cloud.hasSession && Cloud.hasSession());
+    const stateText = sync.state === "busy" ? "同步中" : loggedIn ? "云端同步已开启" : "未登录云账号";
     const dot = sync.state === "busy" ? "busy" : "";
 
     const maps = [
       ["个人资料库预设", "7 个资料文件"],
       ["文案创作", "8 类型 × AI 生成 / 自由创作"],
-      ["选题库", "选题自动归档"],
+      ["选题库", "选题自动同步"],
       ["素材库", "文案 / 图片 / 视频"],
       ["历史生成记录", "生成 + 违规拦截记录"],
       ["发布时间排期", "每日排期表"],
@@ -435,57 +435,52 @@
 
     const nativeMode = !!(window.NativeApp && NativeApp.available());
 
-    // 存储位置：把三类内容的实际路径摊开，并提供一键导出（归档原本在私有目录，手机上看不到）
+    // 存储位置：图片/视频仍进手机相册，其余内容全部存云服务器并每日备份到飞书云盘
     const storageCard = nativeMode
       ? '<div class="section-title"><h2>内容存放位置</h2><span>手机上查看</span></div>' +
         '<div class="card">' +
           '<div class="map-row"><span>图片</span><em>内部存储 / Pictures / 朋友圈AI助手</em></div>' +
           '<div class="map-row"><span>视频</span><em>内部存储 / Movies / 朋友圈AI助手</em></div>' +
-          '<div class="map-row"><span>文案归档</span><em>App 私有目录（手机上无法直接打开）</em></div>' +
-          '<div class="muted" style="margin-top:8px">图片和视频已写入系统相册，打开「图库」即可看到「朋友圈AI助手」相册。文案/选题/排期保存在 App 私有目录，需点下方按钮导出到公共目录后才能用文件管理器查看。</div>' +
-          '<button class="btn ghost block mt12" onclick="App.exportArchive()">导出归档到手机（Documents）</button>' +
-          '<div class="server-test" id="exportResult" style="display:none"></div>' +
+          '<div class="map-row"><span>文案 / 资料 / 记录</span><em>云服务器（跟随账号，换设备不丢）</em></div>' +
+          '<div class="muted" style="margin-top:8px">图片和视频已写入系统相册，打开「图库」即可看到「朋友圈AI助手」相册。文案、资料、选题、排期、生成记录全部保存在云服务器，并由服务器每天 0 点自动备份到飞书云盘。</div>' +
         "</div>"
       : "";
 
     return (
       '<div class="page">' +
-        UI.head("云同步与本地归档", "跨版本同步 / 本机备份", "", true) +
+        UI.head("云同步与飞书备份", "资料跟随账号 · 每日自动备份", "", true) +
         cloudCard() +
-        '<div class="section-title"><h2>本机归档</h2><span>' + stateText + "</span></div>" +
+        '<div class="section-title"><h2>云端同步</h2><span>' + stateText + "</span></div>" +
         '<div class="sync-hero">' +
           '<div class="sync-top"><i class="sync-dot ' + dot + '"></i><span>' + stateText + "</span>" +
-            '<span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.5)">' + (sync.last ? "上次 " + Core.timeAgo(sync.last) : "尚未归档") + "</span>" +
+            '<span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,.5)">' + (sync.last ? "上次 " + Core.timeAgo(sync.last) : "尚未同步") + "</span>" +
           "</div>" +
-          '<div class="sync-path">📁 本机 App 目录 / 归档</div>' +
+          '<div class="sync-path">☁️ 云服务器 + 飞书云盘（每日 0 点自动备份）</div>' +
           '<div class="sync-nums">' +
-            '<div><b>' + (sync.synced || 0) + '</b><span>本次已归档</span></div>' +
-            '<div><b>' + pending + '</b><span>待归档</span></div>' +
+            '<div><b>' + (sync.synced || 0) + '</b><span>本次已同步</span></div>' +
             '<div><b>' + store.history.length + '</b><span>历史记录</span></div>' +
+            '<div><b>' + store.drafts.length + '</b><span>草稿</span></div>' +
           "</div>" +
         "</div>" +
 
         (nativeMode
           ? '<div class="card mt12" style="display:flex;align-items:center;justify-content:space-between">' +
-              '<div><b style="font-size:13.5px">保存后自动归档</b><div class="muted">生成、保存、改资料时自动写入本机</div></div>' +
+              '<div><b style="font-size:13.5px">保存后自动同步</b><div class="muted">生成、保存、改资料时自动上传到云服务器</div></div>' +
               '<label class="switch"><input type="checkbox" ' + (sync.auto ? "checked" : "") + ' onchange="App.toggleAutoSync(this.checked)" /><i></i></label>' +
             "</div>" +
             '<button class="btn primary block mt12" onclick="App.syncNow()">' + icon("cloud", 17) +
-              (sync.state === "busy" ? "正在归档…" : "立即归档到本机") + "</button>"
+              (sync.state === "busy" ? "正在同步…" : "立即同步到云端") + "</button>"
           : '<div class="card mt12"><b style="font-size:13.5px">网页版自动保存</b>' +
-              '<div class="muted" style="margin-top:4px">内容实时保存在浏览器；登录云账号后与 App 版互通，无需本机归档。</div></div>') +
+              '<div class="muted" style="margin-top:4px">内容实时保存在浏览器；登录云账号后自动上传到云服务器，与 App 版互通。</div></div>') +
 
-        (nativeMode && sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '归档未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
+        (sync.error ? '<div class="compliance fail" style="margin-top:10px"><div class="comp-head">' + icon("alert", 15) + '同步未完成</div><div class="comp-desc">' + Core.escapeHtml(sync.error) + "</div></div>" : "") +
 
         storageCard +
 
-        '<div class="section-title"><h2>本机归档目录</h2><span>与方案一致</span></div>' +
+        '<div class="section-title"><h2>同步内容目录</h2><span>与飞书云盘一致</span></div>' +
         '<div class="card">' + maps + "</div>" +
         '<div class="hint">' + icon("cloud", 14) +
-          "<span>" + (nativeMode
-            ? "内容默认保存在本机；登录云账号后会自动上传到你的 Supabase，与网页版互通。图片/视频进手机相册，文案/选题/排期归档到 App 私有目录，需要查看时点上方按钮导出到 Documents。"
-            : "网页版内容保存在浏览器本地；登录云账号后，资料、文案、素材、选题、排期会与 App 版自动互通。") +
-          "</span>" +
+          "<span>所有资料跟随账号保存在云服务器，登录任意设备都能恢复；服务器每天 0 点把全部数据打包备份到飞书云盘，双重保障不丢数据。</span>" +
         "</div>" +
       "</div>"
     );
@@ -662,7 +657,7 @@
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
       ["ai", "spark", "#F2F0FF", "#7A5AF8", "AI 模型接入", aiMenuNote()],
       ["schedule", "calendar", "#FFF5E9", "#FF9F43", "发布时间排期", store.slots.length + " 个时段"],
-      ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与归档", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
+      ["sync", "cloud", "#E9F8F7", "#38B2AC", "云同步与备份", (window.Cloud && Cloud.hasSession) ? (Cloud.hasSession() ? "已连接云端" : "未登录云端") : "本机存储"],
       ["update", "refresh", "#F0F1F5", "#4E5969", "检查更新", updateMenuNote()],
       ["contact", "user", "#F2F0FF", "#7A5AF8", "联系开发者", "微信号 " + (window.Auth ? Auth.wxId : "zhiyao0a1")]
     ].map(([page, ic, bg, color, label, note]) =>

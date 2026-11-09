@@ -13,10 +13,10 @@
   const DEV_PWD = "PYQ-DEV-2026";
 
   const TIERS = [
-    { tier: 1, name: "月会员", price: 9.9, days: 30, tag: "灵活体验" },
-    { tier: 2, name: "季度会员", price: 19.9, days: 90, tag: "省 33%" },
-    { tier: 3, name: "年度会员", price: 59.9, days: 365, tag: "最划算" },
-    { tier: 4, name: "二年会员", price: 99, days: 730, tag: "一次买断" }
+    { tier: 1, name: "月度会员", price: 19.9, days: 30, tag: "灵活体验" },
+    { tier: 2, name: "季度会员", price: 39.9, days: 90, tag: "90 天畅用" },
+    { tier: 3, name: "半年会员", price: 59.9, days: 180, tag: "半年省心" },
+    { tier: 4, name: "年度会员", price: 99.9, days: 365, tag: "最划算" }
   ];
 
   let seq = 0;
