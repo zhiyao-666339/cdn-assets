@@ -289,13 +289,39 @@
   async function sendCode(phone) {
     phone = normPhone(phone);
     if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+
+    // 优先走自建后端验证码接口（支持真短信网关 + 开发模式 devCode）
+    if (window.Cloud && Cloud.configured() && Cloud.serverBase()) {
+      try {
+        const r = await fetch(Cloud.serverBase() + "/auth/send-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phone })
+        });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || !d.ok) return { ok: false, error: (d && d.error) || "验证码发送失败" };
+        return {
+          ok: true,
+          devCode: d.dev ? d.devCode : "",
+          dev: !!d.dev,
+          ttl: d.ttl || 300,
+          cooldown: d.cooldown || 60
+        };
+      } catch (e) {
+        // 后端不通时降级到原生层（App 内本地验证码）
+        if (isNative) return call("authSendCode", [phone]);
+        return { ok: false, error: "验证码服务不可用" };
+      }
+    }
+
     if (isNative) return call("authSendCode", [phone]);
 
+    // 纯网页版无后端兜底：本地模拟
     const acc = fakeAccounts();
     if (!acc[phone]) return { ok: false, error: "该手机号还未注册，请先注册并设置密码" };
     const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
     sessionStorage.setItem("pyq_fake_code_" + phone, code);
-    return { ok: true, devCode: code, ttl: 300, cooldown: 60 };
+    return { ok: true, devCode: code, dev: true, ttl: 300, cooldown: 60 };
   }
 
   async function verifyCode(phone, code) {
@@ -303,6 +329,35 @@
     code = String(code || "").replace(/\D/g, "");
     if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
     if (code.length !== 6) return { ok: false, error: "请输入 6 位验证码" };
+
+    // 走后端验证，通过则拿到 token 并建立云会话
+    if (window.Cloud && Cloud.configured() && Cloud.serverBase()) {
+      try {
+        const r = await fetch(Cloud.serverBase() + "/auth/verify-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phone, code: code })
+        });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || !d.ok) return { ok: false, error: (d && d.error) || "验证码不正确" };
+        // 登录成功：建立云会话
+        if (window.Cloud && typeof Cloud.__setSession === "function") {
+          Cloud.__setSession({
+            access_token: d.token,
+            expires_at: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+            user: d.user || null,
+            mode: "pyq"
+          });
+          try { await Cloud.init(); } catch (e) {}
+          if (window.App && App.render) App.render(true);
+        }
+        return { ok: true, me: d.user ? { phone: phone, name: d.user.name || "", masked: phone.slice(0, 3) + "****" + phone.slice(7), member: {} } : null };
+      } catch (e) {
+        if (isNative) return call("authVerifyCode", [phone, code]);
+        return { ok: false, error: "验证服务不可用" };
+      }
+    }
+
     if (isNative) return call("authVerifyCode", [phone, code]);
 
     const acc = fakeAccounts();

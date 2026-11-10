@@ -142,7 +142,27 @@
   async function ensureToken() {
     if (!hasSession()) return null;
     const exp = Number(session.expires_at || 0);
-    if (!exp || exp - 60 > Math.floor(Date.now() / 1000)) return session.access_token;
+    // 距离过期不足 7 天，或已过期但在宽限期内，自动刷新实现永久在线
+    const sevenDays = 7 * 24 * 60 * 60;
+    if (exp && exp - sevenDays > Math.floor(Date.now() / 1000)) return session.access_token;
+    if (cfg().mode === "pyq") {
+      const c = cfg();
+      try {
+        const res = await fetch(c.server + "/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token }
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok && data.token) {
+          session.access_token = data.token;
+          session.expires_at = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+          saveSession(session);
+          return session.access_token;
+        }
+      } catch (e) { /* 刷新失败走下面清除 */ }
+      saveSession(null);
+      throw new Error("登录已过期，请重新登录");
+    }
     if (cfg().mode === "supabase") {
       const c = cfg();
       const res = await fetch(c.url + "/auth/v1/token?grant_type=refresh_token", {
@@ -526,6 +546,7 @@
     getPersona, buildPersona,
     state: () => state, onChange, toEmail,
     applyRemote: (payload, updatedAt, persona) => applyRemote(payload, updatedAt, persona),
-    snapshot
+    snapshot,
+    __setSession: (s) => saveSession(s)
   };
 })();

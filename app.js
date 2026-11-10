@@ -812,8 +812,9 @@
       { id: "custom", name: "自定义服务器地址", base: "", model: "glm-4-flash", backend: true }
     ],
     image: [
+      { id: "backend", name: "自建服务器（推荐 · 免费）", mode: "backend", base: "", model: "cogview-3-flash", backend: true },
       { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
-      { id: "zhipu", name: "智谱 CogView（免费）", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
+      { id: "zhipu", name: "智谱直连 CogView", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
@@ -1226,30 +1227,22 @@
     toast(p.mode === "free" ? "已切换到免费通道，无需填写 Key" : "已填入「" + p.name + "」，还需填写 API Key");
   }
 
-  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
-  async function generateFreeImage(prompt, size) {
-    const dim = String(size || "1024x1024").split("x");
-    const w = parseInt(dim[0], 10) || 1024;
-    const h = parseInt(dim[1], 10) || 1024;
-    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
-      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
-    toast("正在生成图片，请稍候…");
+  // 把生成好的图片 URL 存入素材库 / 相册 / 生成记录
+  async function applyGeneratedImage(url, prompt, sourceLabel) {
     let thumb = "";
     let saved = false;
     if (window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl) {
       const r = await NativeApp.saveMediaUrl(url, "AI图片_" + Date.now(), false);
-      if (!r || !r.ok) { toast((r && r.error) || "图片下载失败，请重试"); return; }
-      saved = true;
-      thumb = r.thumb || "";
+      if (r && r.ok) { saved = true; thumb = r.thumb || ""; }
     }
     const m = {
-      id: uid("img"), kind: "image", source: "AI 生成 · 免费通道", prompt: prompt,
+      id: uid("img"), kind: "image", source: sourceLabel || "AI 生成", prompt: prompt,
       src: thumb || url, url: url, saved: saved, time: nowISO()
     };
     store.materials.images.unshift(m);
     if (!save()) { m.src = m.url || ""; save(); }
     recordMedia({
-      kind: "image", status: "已通过", title: prompt, source: "AI 生成 · 免费通道",
+      kind: "image", status: "已通过", title: prompt, source: sourceLabel || "AI 生成",
       media: { src: m.src, url: m.url, prompt: prompt }
     });
     queueItem(
@@ -1258,6 +1251,16 @@
     );
     render();
     toast(saved ? "图片已生成并保存到手机相册" : "图片已生成，点图片可预览 / 保存");
+  }
+
+  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
+  async function generateFreeImage(prompt, size) {
+    const dim = String(size || "1024x1024").split("x");
+    const w = parseInt(dim[0], 10) || 1024;
+    const h = parseInt(dim[1], 10) || 1024;
+    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
+      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
+    await applyGeneratedImage(url, prompt, "AI 生成 · 免费通道");
   }
 
   async function generateImage() {
@@ -1289,6 +1292,32 @@
     // 免费通道：无需 Key，App 内下载入相册，网页版直接用图片地址
     if (cfg.mode === "free") {
       await generateFreeImage(prompt, cfg.size);
+      return;
+    }
+
+    // 自建后端代理：走 /images/generations，无需用户填 Key，App 和网页版都能用
+    if (cfg.mode === "backend" || cfg.backend) {
+      const base = aiServerBase() || cfg.base;
+      if (!base) { toast("请先在「云同步」里配置自建服务器地址"); return; }
+      toast("正在生成图片，请稍候…");
+      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = "Bearer " + token;
+        const res = await fetch(base + "/images/generations", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: cfg.model || "cogview-3-flash", prompt: prompt, size: cfg.size || "1024x1024" })
+        });
+        const txt = await res.text();
+        let d; try { d = JSON.parse(txt); } catch (e) { d = {}; }
+        if (!res.ok || !d) { toast("生成失败：HTTP " + res.status + " " + txt.slice(0, 80)); return; }
+        // 智谱返回格式：{ data: [{ url: "..." }] }
+        const url = (d.data && d.data[0] && d.data[0].url) || d.url || "";
+        if (!url) { toast("生成失败：未返回图片地址"); return; }
+        await applyGeneratedImage(url, prompt, "AI 生成");
+      } catch (e) {
+        toast("请求失败：" + ((e && e.message) || e));
+      }
       return;
     }
 
@@ -1679,13 +1708,11 @@
     );
   }
 
-  // AI 生成视频：智谱 CogVideoX 异步任务，原生侧创建 + 轮询
+  // AI 生成视频：智谱 CogVideoX 异步任务
   async function generateVideo() {
     const prompt = (document.getElementById("videoPrompt") || {}).value.trim();
     if (!prompt) { toast("先写画面描述"); return; }
     const cfg = aiCfg().video;
-    if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
-    if (!cfg.base) { toast(cfg.backend ? "请先配置后端代理地址" : "请先在「AI 模型接入」里配置视频模型和 Key"); return; }
 
     const check = Core.checkText(prompt);
     if (!check.passed) {
@@ -1701,12 +1728,59 @@
     }
 
     closeSheet();
+
+    // 自建后端代理：走 /videos/generations（异步）+ /async-result 轮询，无需用户填 Key
+    if (cfg.backend) {
+      const base = aiServerBase() || cfg.base;
+      if (!base) { toast("请先在「云同步」里配置自建服务器地址"); return; }
+      toast("视频生成中，约需 1-3 分钟，请保持页面…");
+      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      try {
+        const r1 = await fetch(base + "/videos/generations", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: cfg.model || "cogvideox-flash", prompt: prompt })
+        });
+        const d1 = await r1.json().catch(() => null);
+        if (!r1.ok || !d1 || !d1.id) { toast("生成失败：" + ((d1 && d1.error) || "HTTP " + r1.status)); return; }
+        const taskId = d1.id;
+        // 轮询结果，最多 3 分钟
+        let url = "";
+        for (let i = 0; i < 90; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const r2 = await fetch(base + "/videos/generations/" + encodeURIComponent(taskId), {
+            method: "GET", headers: { Authorization: "Bearer " + token }
+          });
+          const d2 = await r2.json().catch(() => null);
+          if (!r2.ok || !d2) continue;
+          if (d2.status === "succeed" || d2.status === "success") {
+            url = (d2.data && d2.data.video_url) || d2.video_url || "";
+            break;
+          }
+          if (d2.status === "failed") { toast("视频生成失败：" + (d2.error || "未知错误")); return; }
+        }
+        if (!url) { toast("视频生成超时，请稍后重试"); return; }
+        await applyGeneratedVideo(url, prompt);
+      } catch (e) {
+        toast("请求失败：" + ((e && e.message) || e));
+      }
+      return;
+    }
+
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
+    if (!cfg.base) { toast("请先在「AI 模型接入」里配置视频模型和 Key"); return; }
+
     toast("视频生成中，约需 1-3 分钟，完成后自动保存…");
     const r = await NativeApp.genVideo(cfg.base, cfg.key, cfg.model, prompt);
     if (!r || !r.ok) { toast((r && r.error) || "视频生成失败"); return; }
-    const url = r.url || "";
+    await applyGeneratedVideo(r.url || "", prompt);
+  }
+
+  // 把生成好的视频 URL 存入素材库 / 相册 / 生成记录
+  async function applyGeneratedVideo(url, prompt) {
     let saved = false;
-    if (url && NativeApp.saveMediaUrl) {
+    if (url && window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl) {
       const s = await NativeApp.saveMediaUrl(url, "AI视频_" + Date.now(), true);
       saved = !!(s && s.ok);
     }
