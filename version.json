@@ -1,23 +1,24 @@
 {
   "schema": 2,
-  "versionCode": 30,
-  "versionName": "1.14.5",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.14.5.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.14.5.apk",
-  "size": 2741361,
-  "md5": "00752816efad5425df284c7095190916",
+  "versionCode": 31,
+  "versionName": "1.15.0",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.15.0.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.15.0.apk",
+  "size": 2744017,
+  "md5": "3e183719b4738a64794dfc0260d24179",
   "notes": [
-    "会员档位调整：免费试用 7 天、月度 19.9 元、季度 39.9 元、半年 59.9 元、年度 99.9 元",
-    "「本机归档」全面改为云端同步：资料、文案、记录跟随账号存云服务器，服务器每日 0 点自动备份到飞书云盘",
-    "个人中心「AI 模型接入」菜单标题改为横排显示，不再竖排换行",
-    "激活码生成与验证流程保持不变，旧激活码继续有效"
-  ],
-  "webBuild": 32,
-  "webName": "1.14.7",
-  "webNotes": [
     "账号合并：登录本地账号后自动登录云账号，资料跟随账号自动同步，换手机登录即恢复",
     "云账号在线标识：首页和个人中心显示「云端已连接/未连接」状态，配合自动续期保持长期在线",
     "新增本地归档：云同步页可一键把素材库的图片和视频批量保存到手机相册",
-    "智谱免费模型：图片/视频走自建后端代理，无需用户填 Key（延续上版）"
+    "智谱免费模型：图片/视频走自建后端代理，无需用户填 Key",
+    "云账号永久在线：token 有效期 1 年，到期前 7 天自动续期",
+    "新增短信验证码登录：支持手机号 + 验证码登录"
+  ],
+  "webBuild": 32,
+  "webName": "1.15.0",
+  "webNotes": [
+    "账号合并 + 云账号在线标识 + 本地归档图片视频",
+    "云账号永久在线 + 短信验证码登录 + 智谱免费模型图片视频",
+    "图片生成新增「自建服务器（推荐）」通道"
   ]
 }
