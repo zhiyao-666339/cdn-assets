@@ -477,6 +477,20 @@
 
         storageCard +
 
+        // 本地归档：把素材库的图片/视频批量保存到手机相册
+        (nativeMode
+          ? '<div class="section-title"><h2>本地归档</h2><span>图片 · 视频存到手机相册</span></div>' +
+            '<div class="card">' +
+              '<div class="map-row"><span>图片素材</span><em>' + store.materials.images.length + ' 张</em></div>' +
+              '<div class="map-row"><span>视频素材</span><em>' + store.materials.videos.length + ' 个</em></div>' +
+              '<div style="display:flex;gap:8px;margin-top:12px">' +
+                '<button class="btn primary flex1" onclick="App.archiveImages()">📥 归档图片到相册</button>' +
+                '<button class="btn ghost flex1" onclick="App.archiveVideos()">📥 归档视频到相册</button>' +
+              "</div>" +
+              '<div class="muted" style="margin-top:8px">把素材库中的图片和视频批量保存到手机相册，方便随时查看和发布；已保存过的会跳过。</div>' +
+            "</div>"
+          : "") +
+
         '<div class="section-title"><h2>同步内容目录</h2><span>与飞书云盘一致</span></div>' +
         '<div class="card">' + maps + "</div>" +
         '<div class="hint">' + icon("cloud", 14) +
@@ -895,7 +909,14 @@
         '<div class="profile-hero" style="cursor:default">' +
           '<div class="avatar-wrap" onclick="App.pickAvatar()">' + avatarHtml() + '<i class="avatar-edit">换</i></div>' +
           '<div><div class="profile-name">' + Core.escapeHtml(store.user.name || me.name || "未设置昵称") + '</div>' +
-            '<div class="profile-tag">' + me.masked + " · 当前登录中</div></div>" +
+            '<div class="profile-tag">' + me.masked + " · 当前登录中</div>" +
+            '<div class="profile-cloud">' +
+              '<span class="cloud-dot ' + (window.Cloud && Cloud.hasSession && Cloud.hasSession() ? "online" : "offline") + '"></span>' +
+              (window.Cloud && Cloud.hasSession && Cloud.hasSession()
+                ? '<span style="color:#07C160">云端已连接 · 资料跟随账号</span>'
+                : '<span style="color:#8A8F99">云端未连接</span>') +
+            "</div>" +
+          "</div>" +
           '<span class="profile-badge">已验证</span>' +
         '</div>' +
         '<div class="card mt12">' +

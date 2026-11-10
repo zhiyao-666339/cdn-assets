@@ -158,6 +158,18 @@
     return !!(window.Cloud && Cloud.configured());
   }
 
+  // 登录/注册成功后，自动用同一账号登录云端，让资料跟随账号（后台异步，不阻塞主流程）
+  async function autoCloudSync(phone, password) {
+    if (!cloudReady() || (window.Cloud && Cloud.hasSession && Cloud.hasSession())) return;
+    try {
+      const r = await Cloud.signIn(phone, password);
+      if (r && r.ok) {
+        try { await Cloud.reconcile(false); } catch (e) {}
+        if (window.App && App.render) App.render(true);
+      }
+    } catch (e) { /* 云登录失败不影响本地登录 */ }
+  }
+
   // 本地没有该账号（或密码不一致）时，用云端账号验证身份并自动补建本地账号
   async function cloudSignInFallback(phone, password) {
     if (!cloudReady() || Cloud.hasSession()) return null;
@@ -186,11 +198,11 @@
     if (e) return { ok: false, error: e };
     if (isNative) {
       const r = await call("authLogin", [phone, password]);
-      if (r && r.ok) return r;
+      if (r && r.ok) { autoCloudSync(phone, password); return r; }
       const cl = await cloudSignInFallback(phone, password);
       if (cl) {
         const reg = await call("authRegister", [phone, cl.name, password]);
-        if (reg && reg.ok) return call("authLogin", [phone, password]);
+        if (reg && reg.ok) { autoCloudSync(phone, password); return call("authLogin", [phone, password]); }
       }
       return r;
     }
@@ -203,12 +215,14 @@
         acc[phone].hash = fakeSha(password);
         fakeSave(acc);
         localStorage.setItem(FAKE_SESSION, phone);
+        autoCloudSync(phone, password);
         return { ok: true, me: fakeMe(phone, acc[phone]), cloud: true, msg: "已通过云端账号登录" };
       }
       if (!acc[phone]) return { ok: false, error: "该手机号未注册，请先注册" };
       return { ok: false, error: "密码错误" };
     }
     localStorage.setItem(FAKE_SESSION, phone);
+    autoCloudSync(phone, password);
     return { ok: true, me: fakeMe(phone, acc[phone]) };
   }
 

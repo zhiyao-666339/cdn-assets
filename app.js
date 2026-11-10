@@ -2156,7 +2156,7 @@
     aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
-    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow,
+    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow, archiveImages, archiveVideos,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
       return v ? (v.url || videoPreviewUrls[id] || "") : "";
@@ -2709,6 +2709,43 @@
     save();
     toast(v ? "已开启自动同步" : "已关闭自动同步");
     render();
+  }
+
+  /* ---------- 本地归档：图片 / 视频批量保存到手机相册 ---------- */
+  async function archiveImages() {
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl)) {
+      toast("本地归档需在 App 内使用"); return;
+    }
+    const list = store.materials.images.filter((m) => !m.saved && (m.url || m.src));
+    if (!list.length) { toast("所有图片已归档到相册"); return; }
+    toast("正在归档 " + list.length + " 张图片…");
+    let ok = 0, fail = 0;
+    for (const m of list) {
+      const r = await NativeApp.saveMediaUrl(m.url || m.src, "图片_" + (m.id || Date.now()), false);
+      if (r && r.ok) { m.saved = true; if (r.thumb) m.src = r.thumb; ok++; }
+      else fail++;
+    }
+    save();
+    render();
+    toast("归档完成：成功 " + ok + " 张" + (fail ? "，失败 " + fail + " 张" : ""));
+  }
+
+  async function archiveVideos() {
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl)) {
+      toast("本地归档需在 App 内使用"); return;
+    }
+    const list = store.materials.videos.filter((v) => !v.saved && v.url);
+    if (!list.length) { toast("所有视频已归档到相册"); return; }
+    toast("正在归档 " + list.length + " 个视频…");
+    let ok = 0, fail = 0;
+    for (const v of list) {
+      const r = await NativeApp.saveMediaUrl(v.url, "视频_" + (v.id || Date.now()), true);
+      if (r && r.ok) { v.saved = true; ok++; }
+      else fail++;
+    }
+    save();
+    render();
+    toast("归档完成：成功 " + ok + " 个" + (fail ? "，失败 " + fail + " 个" : ""));
   }
 
   /* ---------- 启动 ---------- */

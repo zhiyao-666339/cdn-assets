@@ -79,6 +79,15 @@
             '<div class="hero-stat"><b>' + blocked + '</b><span>累计拦截</span></div>' +
           "</div>" +
           '<button class="hero-cta" onclick="App.tab(\'create\')">' + icon("spark", 17) + " 写一条今天的朋友圈</button>" +
+          (window.Cloud && Cloud.configured && Cloud.configured()
+            ? '<div class="cloud-status-bar" onclick="App.go(\'sync\')">' +
+                '<span class="cloud-dot ' + (Cloud.hasSession() ? "online" : "offline") + '"></span>' +
+                '<span class="cloud-status-text">' +
+                  (Cloud.hasSession() ? "云端已连接 · 资料跟随账号" : "云端未连接 · 点击登录云账号") +
+                "</span>" +
+                '<span class="cloud-status-arrow">' + icon("right", 12) + "</span>" +
+              "</div>"
+            : "") +
         "</div>" +
 
         '<div class="quick-grid">' +
