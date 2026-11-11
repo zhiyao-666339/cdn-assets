@@ -174,7 +174,9 @@ function signToken(id) {
 /* ---------------- 短信验证码 ---------------- */
 
 function smsReady() {
-  return !!(SMS_PROVIDER && SMS_ACCESS_KEY && SMS_SECRET && SMS_SIGN && SMS_TEMPLATE);
+  if (!(SMS_PROVIDER && SMS_ACCESS_KEY && SMS_SECRET && SMS_SIGN && SMS_TEMPLATE)) return false;
+  if (SMS_PROVIDER === "tencent" && !(process.env.SMS_SDK_APPID || "").trim()) return false;
+  return true;
 }
 
 function genCode() {
@@ -217,12 +219,75 @@ async function sendSms(phone, code) {
   if (!smsReady()) return { ok: true, dev: true, devCode: code }; // 开发模式直接返回
   try {
     if (SMS_PROVIDER === "aliyun") return await aliSms(phone, code);
-    // 腾讯云等短信网关接入点：配置 SMS_PROVIDER=tencent 后在此扩展
+    if (SMS_PROVIDER === "tencent") return await tencentSms(phone, code);
     return { ok: true, dev: true, devCode: code };
   } catch (e) {
     console.error("[SMS] 发送失败:", e.message);
     return { ok: false, error: "短信发送失败，请稍后重试" };
   }
+}
+
+// 腾讯云短信 SendSms（TC3-HMAC-SHA256 签名，零依赖）
+// 需要的环境变量：SMS_SDK_APPID（短信 SDK AppID）；SecretId/SecretKey 沿用 SMS_ACCESS_KEY/SMS_SECRET
+async function tencentSms(phone, code) {
+  const SDK_APPID = (process.env.SMS_SDK_APPID || "").trim();
+  if (!SDK_APPID) throw new Error("未配置 SMS_SDK_APPID");
+  const host = "sms.tencentcloudapi.com";
+  const service = "sms";
+  const action = "SendSms";
+  const version = "2021-01-11";
+  const region = "ap-guangzhou";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+  const secretId = SMS_ACCESS_KEY;
+  const secretKey = SMS_SECRET;
+  // +86 前缀，国内手机号直接补
+  const phoneE164 = phone.startsWith("+") ? phone : "+86" + phone;
+  const payload = JSON.stringify({
+    SmsSdkAppId: SDK_APPID,
+    SignName: SMS_SIGN,
+    TemplateId: SMS_TEMPLATE,
+    TemplateParamSet: [code, String(Math.floor(SMS_CODE_TTL / 60000))],
+    PhoneNumberSet: [phoneE164]
+  });
+  // 1. 拼接规范请求串
+  const canonicalHeaders = "content-type:application/json; charset=utf-8\nhost:" + host + "\n";
+  const signedHeaders = "content-type;host";
+  const hashedPayload = crypto.createHash("sha256").update(payload).digest("hex");
+  const canonicalRequest = "POST\n/\n\n" + canonicalHeaders + "\n" + signedHeaders + "\n" + hashedPayload;
+  // 2. 拼接待签名字符串
+  const credentialScope = date + "/" + service + "/tc3_request";
+  const hashedCanonical = crypto.createHash("sha256").update(canonicalRequest).digest("hex");
+  const stringToSign = "TC3-HMAC-SHA256\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonical;
+  // 3. 计算签名
+  const hmac = (k, d) => crypto.createHmac("sha256", k).update(d).digest();
+  const kDate = hmac("TC3" + secretKey, date);
+  const kService = hmac(kDate, service);
+  const kSigning = hmac(kService, "tc3_request");
+  const signature = crypto.createHmac("sha256", kSigning).update(stringToSign).digest("hex");
+  const authorization = "TC3-HMAC-SHA256 Credential=" + secretId + "/" + credentialScope +
+    ", SignedHeaders=" + signedHeaders + ", Signature=" + signature;
+  const r = await fetch("https://" + host + "/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Host: host,
+      "X-TC-Action": action,
+      "X-TC-Version": version,
+      "X-TC-Timestamp": String(timestamp),
+      "X-TC-Region": region,
+      Authorization: authorization
+    },
+    body: payload
+  });
+  const d = await r.json().catch(() => null);
+  const resp = d && d.Response;
+  if (!r.ok || !resp || resp.Error) {
+    throw new Error((resp && resp.Error && (resp.Error.Message || resp.Error.Code)) || ("HTTP " + r.status));
+  }
+  const status = resp.SendStatusSet && resp.SendStatusSet[0];
+  if (status && status.Code !== "Ok") throw new Error(status.Message || status.Code);
+  return { ok: true };
 }
 
 function verifyToken(token) {
@@ -380,6 +445,15 @@ function buildCorpus(payload) {
   (Array.isArray(p.profileSections) ? p.profileSections : []).forEach((s) => {
     const v = String((s && s.content) || "").trim();
     if (v) rows.push("【资料 · " + String(s.id || "") + "】\n" + clipText(v, 800));
+  });
+  // 日记：AI 学习用户最近的生活记录、心情与常用表达，让文案更像本人
+  const diaries = (Array.isArray(p.diaries) ? p.diaries : []).slice(0, 20);
+  diaries.forEach((d) => {
+    if (!d || !d.content) return;
+    const date = String(d.date || "").slice(0, 10);
+    const mood = d.mood ? ("心情：" + d.mood + " ") : "";
+    const weather = d.weather ? ("天气：" + d.weather + " ") : "";
+    rows.push("【日记 " + date + "】" + (mood || weather ? ("\n" + mood + weather).trim() : "") + "\n" + clipText(String(d.content), 400));
   });
   const samples = [];
   ((p.materials && p.materials.copy) || []).forEach((m) => {
