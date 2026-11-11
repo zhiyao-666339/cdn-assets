@@ -460,6 +460,35 @@ body {
 .btn.primary:disabled { background: #C9CDD4; box-shadow: none; cursor: not-allowed; }
 .btn.ghost { background: #fff; color: #333; border: 1px solid var(--line); }
 .flex1 { flex: 1; }
+
+/* 日记模块 */
+.diary-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.diary-tag {
+  padding: 6px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.diary-tag.on {
+  background: #07C160;
+  color: #fff;
+  border-color: #07C160;
+}
+.diary-item { cursor: pointer; }
+.diary-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.diary-date { font-size: 13px; color: var(--sub); font-weight: 500; }
+.diary-pill {
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #FFF4E5;
+  color: #B26A00;
+  font-size: 11px;
+}
+.diary-pill.weather { background: #E5F1FF; color: #1D5FA8; }
+.diary-preview { font-size: 14px; color: var(--text); line-height: 1.6; }
 .btn.soft { background: #EAFBF1; color: var(--green-dark); }
 .btn.danger { background: var(--red); color: #fff; }
 .btn.small { height: 34px; font-size: 12.5px; border-radius: 9px; padding: 0 12px; }

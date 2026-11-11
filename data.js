@@ -182,6 +182,10 @@ window.SEED = {
 
   drafts: [],
 
+  // 日记：用户生活记录，AI 写文案会参考，让文案更像本人
+  // 每条：{ id, date:"YYYY-MM-DD", mood, weather, content, time }
+  diaries: [],
+
   history: [],
 
   blocks: [],

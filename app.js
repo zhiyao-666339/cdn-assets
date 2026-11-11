@@ -4,7 +4,7 @@
   const icon = UI.icon;
   const SYNC_KEY = "pyq_sync_v1";
   const TABS = { home: "home", create: "create", topics: "topics", materials: "materials", more: "more" };
-  const TAB_OF = { schedule: "more", profile: "more", history: "more", compliance: "more", sync: "more", account: "more", member: "more", contact: "more", update: "more", logs: "more", ai: "more" };
+  const TAB_OF = { schedule: "more", profile: "more", history: "more", compliance: "more", sync: "more", account: "more", member: "more", contact: "more", update: "more", logs: "more", ai: "more", diary: "more", "diary-write": "more" };
   let stack = [];
 
   const RENDERERS = {
@@ -24,6 +24,8 @@
     update: ViewsMore.renderUpdate,
     logs: ViewsMore.renderLogs,
     ai: ViewsMore.renderAI,
+    diary: () => ViewsDiary.renderList(),
+    "diary-write": () => ViewsDiary.renderWrite(window.__diaryEditId || ""),
     more: ViewsMore.renderMore
   };
 
@@ -38,6 +40,7 @@
     });
     if (scrollTop) view.scrollTop = 0;
     else view.scrollTop = y;
+    if (ui.page === "diary-write") bindDiaryTags();
   }
 
   function tab(page) {
@@ -941,6 +944,16 @@
       const v = sec(id);
       if (v) rows.push(label + "：" + clip(v, n));
     });
+    // 日记：把最近 5 篇日记作为作者近期生活/心情/口吻参考
+    const diaries = (store.diaries || []).slice(0, 5);
+    if (diaries.length) {
+      const diaryRows = diaries.map((d) => {
+        const mood = d.mood ? ("心情" + d.mood + " ") : "";
+        const weather = d.weather ? ("天气" + d.weather + " ") : "";
+        return "[" + (d.date || "") + "]" + (mood || weather ? (mood + weather).trim() + " " : "") + clip(d.content, 120);
+      });
+      rows.push("我最近的生活记录（日记，参考口吻与细节）：\n" + diaryRows.join("\n"));
+    }
     if (!rows.length) return "";
     return rows.join("\n");
   }
@@ -2157,6 +2170,7 @@
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
     saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow, archiveImages, archiveVideos,
+    editDiary, saveDiary, delDiary,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
       return v ? (v.url || videoPreviewUrls[id] || "") : "";
@@ -2746,6 +2760,59 @@
     save();
     render();
     toast("归档完成：成功 " + ok + " 个" + (fail ? "，失败 " + fail + " 个" : ""));
+  }
+
+  /* ---------- 我的日记 ---------- */
+  function editDiary(id) {
+    window.__diaryEditId = id || "";
+    go("diary-write");
+  }
+
+  function saveDiary(editId) {
+    const date = (document.getElementById("diaryDate") || {}).value || "";
+    const content = ((document.getElementById("diaryContent") || {}).value || "").trim();
+    if (!date) { toast("请选择日期"); return; }
+    if (!content) { toast("先写点内容再保存"); return; }
+    const mood = (document.querySelector("#diaryMoods .diary-tag.on") || {}).dataset?.v || "";
+    const weather = (document.querySelector("#diaryWeathers .diary-tag.on") || {}).dataset?.v || "";
+    if (!store.diaries) store.diaries = [];
+    if (editId) {
+      const d = store.diaries.find((x) => x.id === editId);
+      if (d) { d.date = date; d.mood = mood; d.weather = weather; d.content = content; d.time = nowISO(); }
+    } else {
+      store.diaries.unshift({ id: uid("diary"), date, mood, weather, content, time: nowISO() });
+    }
+    window.__diaryEditId = "";
+    save();
+    if (window.Cloud && Cloud.markDirty) Cloud.markDirty();
+    toast("日记已保存，AI 下次学习会参考");
+    go("diary");
+  }
+
+  function delDiary(id) {
+    if (!id) return;
+    if (!confirm("确定删除这篇日记？")) return;
+    store.diaries = (store.diaries || []).filter((d) => d.id !== id);
+    window.__diaryEditId = "";
+    save();
+    if (window.Cloud && Cloud.markDirty) Cloud.markDirty();
+    toast("已删除");
+    go("diary");
+  }
+
+  // 日记页标签点击（心情/天气单选切换）
+  function bindDiaryTags() {
+    ["diaryMoods", "diaryWeathers"].forEach((cid) => {
+      const wrap = document.getElementById(cid);
+      if (!wrap) return;
+      wrap.querySelectorAll(".diary-tag").forEach((btn) => {
+        btn.onclick = () => {
+          const wasOn = btn.classList.contains("on");
+          wrap.querySelectorAll(".diary-tag").forEach((b) => b.classList.remove("on"));
+          if (!wasOn) btn.classList.add("on");
+        };
+      });
+    });
   }
 
   /* ---------- 启动 ---------- */

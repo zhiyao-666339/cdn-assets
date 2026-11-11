@@ -310,6 +310,7 @@
       topics: s.topics,
       materials: s.materials,
       drafts: s.drafts,
+      diaries: s.diaries || [],
       history: s.history,
       blocks: s.blocks,
       schedule: s.schedule,
@@ -368,6 +369,7 @@
         s.cloudUpdatedAt = updatedAt || payload.cloudUpdatedAt || "";
         // 兜底默认值，避免旧数据缺少字段导致页面报错
         if (!s.materials) s.materials = { copy: [], images: [], videos: [] };
+        if (!s.diaries) s.diaries = [];
         if (!s.profiles) s.profiles = {};
         if (!s.dailyDate) s.dailyDate = "";
       }

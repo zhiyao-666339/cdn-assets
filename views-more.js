@@ -667,6 +667,7 @@
       ["member", "star", "#FFF8E6", "#D48806", "会员中心", memberStatus(mm)],
       ["profile", "user", "#EAFBF1", "#07C160", "让 AI 认识你", "AI 背景档案 · " + store.profileSections.filter((s) => s.content).length + "/7 已填写"],
       ["history", "clock", "#EEF3FF", "#5B8FF9", "历史生成记录", store.history.length + " 条"],
+      ["diary", "book", "#FFF0F5", "#E8590C", "我的日记", (store.diaries || []).length + " 篇 · AI 学习参考"],
       ["logs", "shield", "#FFF8E6", "#D48806", "系统日志", (store.auditLog || []).length + " 条留痕"],
       ["compliance", "shield", "#FFF1F0", "#FA5151", "合规检测", store.words.length + " 条词库"],
       ["ai", "spark", "#F2F0FF", "#7A5AF8", "AI 模型接入", aiMenuNote()],
