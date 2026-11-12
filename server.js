@@ -19,6 +19,34 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 
+/* ---------- 轻量 .env 加载：配置可写进数据卷，重启即生效，无需重建容器 ----------
+ * 读取顺序：$ENV_FILE > $DATA_DIR/.env > ./.env
+ * 已存在的真实环境变量优先，不会被文件覆盖。
+ */
+(function loadEnvFile() {
+  const candidates = [];
+  if (process.env.ENV_FILE) candidates.push(path.resolve(process.env.ENV_FILE));
+  candidates.push(path.resolve(process.env.DATA_DIR || "./data", ".env"));
+  candidates.push(path.resolve(".env"));
+  for (const f of candidates) {
+    let raw;
+    try { raw = fs.readFileSync(f, "utf8"); } catch (e) { continue; }
+    raw.split(/\r?\n/).forEach((line) => {
+      const s = line.trim();
+      if (!s || s.charAt(0) === "#") return;
+      const i = s.indexOf("=");
+      if (i < 1) return;
+      const k = s.slice(0, i).trim();
+      let v = s.slice(i + 1).trim();
+      if ((v.charAt(0) === '"' && v.charAt(v.length - 1) === '"') ||
+          (v.charAt(0) === "'" && v.charAt(v.length - 1) === "'")) v = v.slice(1, -1);
+      if (!process.env[k]) process.env[k] = v;
+    });
+    console.log("[env] 已加载配置：" + f);
+    break;
+  }
+})();
+
 const PORT = Number(process.env.PORT || 8787);
 const ZHIPU_KEY = (process.env.ZHIPU_API_KEY || "").trim();
 const PROXY_TOKEN = (process.env.PROXY_TOKEN || "").trim();
@@ -904,6 +932,7 @@ const server = http.createServer(async (req, res) => {
       auth: PROXY_TOKEN ? "token" : "open",
       users: listUsers().length,
       feishu: (FEISHU_APP_ID && FEISHU_APP_SECRET && FEISHU_FOLDER) ? "on" : "off",
+      sms: smsReady() ? SMS_PROVIDER : "dev",
       store: remoteEnabled() ? "feishu" : "local",
       restored: lastRestore,
       time: new Date().toISOString()
