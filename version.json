@@ -1,25 +1,24 @@
 {
   "schema": 2,
-  "versionCode": 31,
-  "versionName": "1.15.0",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.15.0.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.15.0.apk",
-  "size": 2744017,
-  "md5": "3e183719b4738a64794dfc0260d24179",
+  "versionCode": 32,
+  "versionName": "1.16.1",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.16.1.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.16.1.apk",
+  "size": 2752732,
+  "md5": "1106e100bc19f5ebf82610c86dc15ec8",
   "notes": [
-    "账号合并：登录本地账号后自动登录云账号，资料跟随账号自动同步，换手机登录即恢复",
-    "云账号在线标识：首页和个人中心显示「云端已连接/未连接」状态，配合自动续期保持长期在线",
-    "新增本地归档：云同步页可一键把素材库的图片和视频批量保存到手机相册",
-    "智谱免费模型：图片/视频走自建后端代理，无需用户填 Key",
-    "云账号永久在线：token 有效期 1 年，到期前 7 天自动续期",
-    "新增短信验证码登录：支持手机号 + 验证码登录"
+    "新增日记模块：我的 → 我的日记，可记录心情/天气，日记纳入 AI 学习，写文案更像本人",
+    "新增邮箱验证码登录：账号支持手机号或邮箱，无需短信资质即可收发验证码",
+    "登录/注册页账号输入框统一为「手机号或邮箱」，自动识别格式",
+    "云端同步：日记内容跟随账号，换手机登录自动恢复",
+    "修复：个人认证无法申请短信签名导致的登录受限问题"
   ],
-  "webBuild": 34,
+  "webBuild": 35,
   "webName": "1.16.1",
   "webNotes": [
-    "新增邮箱验证码登录：账号支持手机号或邮箱，个人认证零资质门槛",
-    "后端支持 SMTP 发信（465 隐式 TLS / 587 STARTTLS 自动切换）",
-    "配置可从数据卷 .env 读取，改配置只需重启容器",
-    "日记模块：我的 → 我的日记，AI 写文案会参考日记口吻"
+    "新增日记模块 + AI 学习参考日记口吻",
+    "邮箱验证码登录：账号支持手机号或邮箱",
+    "后端 SMTP 发信（465 隐式 TLS / 587 STARTTLS）",
+    "配置支持数据卷 .env，改配置只需重启容器"
   ]
 }

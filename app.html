@@ -456,6 +456,32 @@ body {
 }
 .hero-cta:active { transform: scale(.99); }
 
+.cloud-status-bar {
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.85);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.cloud-status-bar .cloud-status-text { flex: 1; }
+.cloud-status-bar .cloud-status-arrow { color: var(--text-tertiary); }
+.cloud-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cloud-dot.online {
+  background: #07C160;
+  box-shadow: 0 0 0 3px rgba(7,193,96,.18);
+}
+.cloud-dot.offline {
+  background: #B8BCC4;
+  box-shadow: 0 0 0 3px rgba(184,188,196,.2);
+}
+
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -986,6 +1012,7 @@ img.hist-media { cursor: pointer; }
 }
 .profile-name { font-size: 17px; font-weight: 700; }
 .profile-tag { font-size: 11.5px; color: var(--sub); margin-top: 3px; }
+.profile-cloud { font-size: 11.5px; margin-top: 4px; display: flex; align-items: center; gap: 5px; }
 .profile-badge {
   position: absolute; right: 14px; top: 14px;
   font-size: 10px; color: var(--green-dark);
@@ -2159,6 +2186,10 @@ window.SEED = {
   },
 
   drafts: [],
+
+  // 日记：用户生活记录，AI 写文案会参考，让文案更像本人
+  // 每条：{ id, date:"YYYY-MM-DD", mood, weather, content, time }
+  diaries: [],
 
   history: [],
 
@@ -3990,6 +4021,15 @@ window.SEED = {
             '<div class="hero-stat"><b>' + blocked + '</b><span>累计拦截</span></div>' +
           "</div>" +
           '<button class="hero-cta" onclick="App.tab(\'create\')">' + icon("spark", 17) + " 写一条今天的朋友圈</button>" +
+          (window.Cloud && Cloud.configured && Cloud.configured()
+            ? '<div class="cloud-status-bar" onclick="App.go(\'sync\')">' +
+                '<span class="cloud-dot ' + (Cloud.hasSession() ? "online" : "offline") + '"></span>' +
+                '<span class="cloud-status-text">' +
+                  (Cloud.hasSession() ? "云端已连接 · 资料跟随账号" : "云端未连接 · 点击登录云账号") +
+                "</span>" +
+                '<span class="cloud-status-arrow">' + icon("right", 12) + "</span>" +
+              "</div>"
+            : "") +
         "</div>" +
 
         '<div class="quick-grid">' +
@@ -4977,6 +5017,20 @@ window.SEED = {
 
         storageCard +
 
+        // 本地归档：把素材库的图片/视频批量保存到手机相册
+        (nativeMode
+          ? '<div class="section-title"><h2>本地归档</h2><span>图片 · 视频存到手机相册</span></div>' +
+            '<div class="card">' +
+              '<div class="map-row"><span>图片素材</span><em>' + store.materials.images.length + ' 张</em></div>' +
+              '<div class="map-row"><span>视频素材</span><em>' + store.materials.videos.length + ' 个</em></div>' +
+              '<div style="display:flex;gap:8px;margin-top:12px">' +
+                '<button class="btn primary flex1" onclick="App.archiveImages()">📥 归档图片到相册</button>' +
+                '<button class="btn ghost flex1" onclick="App.archiveVideos()">📥 归档视频到相册</button>' +
+              "</div>" +
+              '<div class="muted" style="margin-top:8px">把素材库中的图片和视频批量保存到手机相册，方便随时查看和发布；已保存过的会跳过。</div>' +
+            "</div>"
+          : "") +
+
         '<div class="section-title"><h2>同步内容目录</h2><span>与飞书云盘一致</span></div>' +
         '<div class="card">' + maps + "</div>" +
         '<div class="hint">' + icon("cloud", 14) +
@@ -5396,7 +5450,14 @@ window.SEED = {
         '<div class="profile-hero" style="cursor:default">' +
           '<div class="avatar-wrap" onclick="App.pickAvatar()">' + avatarHtml() + '<i class="avatar-edit">换</i></div>' +
           '<div><div class="profile-name">' + Core.escapeHtml(store.user.name || me.name || "未设置昵称") + '</div>' +
-            '<div class="profile-tag">' + me.masked + " · 当前登录中</div></div>" +
+            '<div class="profile-tag">' + me.masked + " · 当前登录中</div>" +
+            '<div class="profile-cloud">' +
+              '<span class="cloud-dot ' + (window.Cloud && Cloud.hasSession && Cloud.hasSession() ? "online" : "offline") + '"></span>' +
+              (window.Cloud && Cloud.hasSession && Cloud.hasSession()
+                ? '<span style="color:#07C160">云端已连接 · 资料跟随账号</span>'
+                : '<span style="color:#8A8F99">云端未连接</span>') +
+            "</div>" +
+          "</div>" +
           '<span class="profile-badge">已验证</span>' +
         '</div>' +
         '<div class="card mt12">' +
@@ -5504,7 +5565,95 @@ window.SEED = {
 })();
 
 </script>
-<script src="views-diary.js"></script>
+<script>
+/* views-diary.js — 我的日记：写 / 看 / 删，AI 学习日记内容让文案更像本人 */
+(function () {
+  const MOODS = ["开心", "平静", "感动", "疲惫", "焦虑", "期待", "感恩", "失落"];
+  const WEATHERS = ["晴", "多云", "阴", "小雨", "大雨", "雪", "风", "雾"];
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  /* ---------- 写日记 ---------- */
+  function renderWrite(editId) {
+    const store = Core.store;
+    if (!store.diaries) store.diaries = [];
+    const editing = editId ? store.diaries.find((d) => d.id === editId) : null;
+    const today = editing ? editing.date : todayStr();
+    const mood = editing ? editing.mood : "";
+    const weather = editing ? editing.weather : "";
+    const content = editing ? editing.content : "";
+
+    return (
+      '<div class="page pad">' +
+        UI.head(editing ? "编辑日记" : "写日记", "AI 会参考日记，让文案更像你", "", true) +
+        '<div class="card" style="margin-bottom:12px">' +
+          '<div class="muted" style="margin-bottom:10px">记录今天的生活、心情、想法。<br><b>AI 写文案时会参考你的日记</b>，让文案更像你的口吻。</div>' +
+          '<label class="muted">日期</label>' +
+          '<input class="input" id="diaryDate" type="date" value="' + esc(today) + '" />' +
+          '<label class="muted" style="margin-top:10px">心情（可选）</label>' +
+          '<div class="diary-tags" id="diaryMoods">' +
+            MOODS.map((m) => '<button type="button" class="diary-tag' + (mood === m ? " on" : "") + '" data-v="' + m + '">' + m + "</button>").join("") +
+          "</div>" +
+          '<label class="muted" style="margin-top:10px">天气（可选）</label>' +
+          '<div class="diary-tags" id="diaryWeathers">' +
+            WEATHERS.map((w) => '<button type="button" class="diary-tag' + (weather === w ? " on" : "") + '" data-v="' + w + '">' + w + "</button>").join("") +
+          "</div>" +
+          '<label class="muted" style="margin-top:10px">今天想说点什么</label>' +
+          '<textarea class="input" id="diaryContent" rows="8" placeholder="比如：今天试了一家新餐厅，招牌菜真的绝了，姐妹们冲…">' + esc(content) + "</textarea>" +
+          '<div style="display:flex;gap:8px;margin-top:12px">' +
+            '<button class="btn primary flex1" onclick="App.saveDiary(\'' + (editId || "") + '\')">' + (editing ? "保存修改" : "保存日记") + "</button>" +
+            (editing ? '<button class="btn ghost" onclick="App.delDiary(\'' + editId + '\')">删除</button>' : "") +
+          "</div>" +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  /* ---------- 日记列表 ---------- */
+  function renderList() {
+    const store = Core.store;
+    const list = (store.diaries || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const cards = list.map((d) => {
+      const preview = String(d.content || "").replace(/\s+/g, " ").slice(0, 80);
+      return (
+        '<div class="card diary-item" onclick="App.editDiary(\'' + d.id + '\')">' +
+          '<div class="diary-item-head">' +
+            '<span class="diary-date">' + esc(d.date || "") + "</span>" +
+            (d.mood ? '<span class="diary-pill">' + esc(d.mood) + "</span>" : "") +
+            (d.weather ? '<span class="diary-pill weather">' + esc(d.weather) + "</span>" : "") +
+          "</div>" +
+          '<div class="diary-preview">' + esc(preview) + (String(d.content || "").length > 80 ? "…" : "") + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    return (
+      '<div class="page pad">' +
+        UI.head("我的日记", "记录生活 · AI 学习参考", "", true) +
+        '<button class="btn primary" style="width:100%;margin-bottom:12px" onclick="App.go(\'diary-write\')">✍️ 写一篇日记</button>' +
+        (list.length === 0
+          ? '<div class="empty-state"><div class="muted">还没有日记，点上方按钮写第一篇</div><div class="muted" style="margin-top:6px;font-size:12px">AI 会参考你的日记，让文案更像你</div></div>'
+          : cards) +
+      "</div>"
+    );
+  }
+
+  window.ViewsDiary = {
+    renderList,
+    renderWrite
+  };
+})();
+
+</script>
 <script>
 /* 账号 + 数据云同步
  * 默认走自建后端 pyq-server（mode="pyq"）：
@@ -5650,7 +5799,27 @@ window.SEED = {
   async function ensureToken() {
     if (!hasSession()) return null;
     const exp = Number(session.expires_at || 0);
-    if (!exp || exp - 60 > Math.floor(Date.now() / 1000)) return session.access_token;
+    // 距离过期不足 7 天，或已过期但在宽限期内，自动刷新实现永久在线
+    const sevenDays = 7 * 24 * 60 * 60;
+    if (exp && exp - sevenDays > Math.floor(Date.now() / 1000)) return session.access_token;
+    if (cfg().mode === "pyq") {
+      const c = cfg();
+      try {
+        const res = await fetch(c.server + "/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token }
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok && data.token) {
+          session.access_token = data.token;
+          session.expires_at = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+          saveSession(session);
+          return session.access_token;
+        }
+      } catch (e) { /* 刷新失败走下面清除 */ }
+      saveSession(null);
+      throw new Error("登录已过期，请重新登录");
+    }
     if (cfg().mode === "supabase") {
       const c = cfg();
       const res = await fetch(c.url + "/auth/v1/token?grant_type=refresh_token", {
@@ -5798,6 +5967,7 @@ window.SEED = {
       topics: s.topics,
       materials: s.materials,
       drafts: s.drafts,
+      diaries: s.diaries || [],
       history: s.history,
       blocks: s.blocks,
       schedule: s.schedule,
@@ -5856,6 +6026,7 @@ window.SEED = {
         s.cloudUpdatedAt = updatedAt || payload.cloudUpdatedAt || "";
         // 兜底默认值，避免旧数据缺少字段导致页面报错
         if (!s.materials) s.materials = { copy: [], images: [], videos: [] };
+        if (!s.diaries) s.diaries = [];
         if (!s.profiles) s.profiles = {};
         if (!s.dailyDate) s.dailyDate = "";
       }
@@ -6034,7 +6205,8 @@ window.SEED = {
     getPersona, buildPersona,
     state: () => state, onChange, toEmail,
     applyRemote: (payload, updatedAt, persona) => applyRemote(payload, updatedAt, persona),
-    snapshot
+    snapshot,
+    __setSession: (s) => saveSession(s)
   };
 })();
 
@@ -6295,6 +6467,26 @@ window.SEED = {
   }
   function normPhone(p) { return String(p || "").replace(/\D/g, ""); }
   function phoneOK(p) { return /^1\d{10}$/.test(p); }
+  // 账号：手机号或邮箱。含 @ 视为邮箱（转小写、去空格），否则按手机号处理
+  function normAccount(v) {
+    const s = String(v || "").trim();
+    return s.indexOf("@") >= 0 ? s.toLowerCase() : s.replace(/\D/g, "");
+  }
+  function accountOK(a) {
+    if (!a) return false;
+    if (a.indexOf("@") >= 0) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
+    return /^1\d{10}$/.test(a);
+  }
+  function isEmail(a) { return String(a || "").indexOf("@") >= 0; }
+  function maskAccount(a) {
+    if (isEmail(a)) {
+      const i = a.indexOf("@");
+      const name = a.slice(0, i);
+      const head = name.slice(0, Math.min(2, name.length));
+      return head + "***" + a.slice(i);
+    }
+    return a.slice(0, 3) + "****" + a.slice(7);
+  }
   function pwdOK(p) { return !!p && p.length >= 6 && p.length <= 32 && !/\s/.test(p); }
   function pwdError(p) {
     if (!p) return "请设置登录密码";
@@ -6341,7 +6533,7 @@ window.SEED = {
     return {
       phone: phone,
       name: acc.name || "",
-      masked: phone.slice(0, 3) + "****" + phone.slice(7),
+      masked: maskAccount(phone),
       member: fakeMember(acc)
     };
   }
@@ -6362,6 +6554,18 @@ window.SEED = {
 
   function cloudReady() {
     return !!(window.Cloud && Cloud.configured());
+  }
+
+  // 登录/注册成功后，自动用同一账号登录云端，让资料跟随账号（后台异步，不阻塞主流程）
+  async function autoCloudSync(phone, password) {
+    if (!cloudReady() || (window.Cloud && Cloud.hasSession && Cloud.hasSession())) return;
+    try {
+      const r = await Cloud.signIn(phone, password);
+      if (r && r.ok) {
+        try { await Cloud.reconcile(false); } catch (e) {}
+        if (window.App && App.render) App.render(true);
+      }
+    } catch (e) { /* 云登录失败不影响本地登录 */ }
   }
 
   // 本地没有该账号（或密码不一致）时，用云端账号验证身份并自动补建本地账号
@@ -6386,17 +6590,17 @@ window.SEED = {
   }
 
   async function login(phone, password) {
-    phone = normPhone(phone);
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    phone = normAccount(phone);
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     const e = pwdError(password);
     if (e) return { ok: false, error: e };
     if (isNative) {
       const r = await call("authLogin", [phone, password]);
-      if (r && r.ok) return r;
+      if (r && r.ok) { autoCloudSync(phone, password); return r; }
       const cl = await cloudSignInFallback(phone, password);
       if (cl) {
         const reg = await call("authRegister", [phone, cl.name, password]);
-        if (reg && reg.ok) return call("authLogin", [phone, password]);
+        if (reg && reg.ok) { autoCloudSync(phone, password); return call("authLogin", [phone, password]); }
       }
       return r;
     }
@@ -6409,19 +6613,21 @@ window.SEED = {
         acc[phone].hash = fakeSha(password);
         fakeSave(acc);
         localStorage.setItem(FAKE_SESSION, phone);
+        autoCloudSync(phone, password);
         return { ok: true, me: fakeMe(phone, acc[phone]), cloud: true, msg: "已通过云端账号登录" };
       }
-      if (!acc[phone]) return { ok: false, error: "该手机号未注册，请先注册" };
+      if (!acc[phone]) return { ok: false, error: "该账号未注册，请先注册" };
       return { ok: false, error: "密码错误" };
     }
     localStorage.setItem(FAKE_SESSION, phone);
+    autoCloudSync(phone, password);
     return { ok: true, me: fakeMe(phone, acc[phone]) };
   }
 
   async function register(phone, nickname, password) {
-    phone = normPhone(phone);
+    phone = normAccount(phone);
     nickname = String(nickname || "").trim();
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     const ne = nickError(nickname);
     if (ne) return { ok: false, error: ne };
     const e = pwdError(password);
@@ -6433,7 +6639,7 @@ window.SEED = {
     }
 
     const acc = fakeAccounts();
-    if (acc[phone]) return { ok: false, error: "该手机号已注册，请直接登录" };
+    if (acc[phone]) return { ok: false, error: "该账号已注册，请直接登录" };
     acc[phone] = { name: nickname, hash: fakeSha(password), trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
     fakeSave(acc);
     localStorage.setItem(FAKE_SESSION, phone);
@@ -6493,26 +6699,82 @@ window.SEED = {
   }
 
   async function sendCode(phone) {
-    phone = normPhone(phone);
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    phone = normAccount(phone);
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
+    const mail = isEmail(phone);
+
+    // 优先走自建后端验证码接口（支持真短信网关 + 开发模式 devCode）
+    if (window.Cloud && Cloud.configured() && Cloud.serverBase()) {
+      try {
+        const r = await fetch(Cloud.serverBase() + "/auth/send-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phone })
+        });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || !d.ok) return { ok: false, error: (d && d.error) || "验证码发送失败" };
+        return {
+          ok: true,
+          devCode: d.dev ? d.devCode : "",
+          dev: !!d.dev,
+          ttl: d.ttl || 300,
+          cooldown: d.cooldown || 60
+        };
+      } catch (e) {
+        // 后端不通时降级到原生层（App 内本地验证码）
+        if (isNative) return call("authSendCode", [phone]);
+        return { ok: false, error: "验证码服务不可用" };
+      }
+    }
+
     if (isNative) return call("authSendCode", [phone]);
 
+    // 纯网页版无后端兜底：本地模拟
     const acc = fakeAccounts();
-    if (!acc[phone]) return { ok: false, error: "该手机号还未注册，请先注册并设置密码" };
+    if (!acc[phone]) return { ok: false, error: mail ? "该邮箱还未注册，请先注册并设置密码" : "该手机号还未注册，请先注册并设置密码" };
     const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
     sessionStorage.setItem("pyq_fake_code_" + phone, code);
-    return { ok: true, devCode: code, ttl: 300, cooldown: 60 };
+    return { ok: true, devCode: code, dev: true, ttl: 300, cooldown: 60 };
   }
 
   async function verifyCode(phone, code) {
-    phone = normPhone(phone);
+    phone = normAccount(phone);
     code = String(code || "").replace(/\D/g, "");
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     if (code.length !== 6) return { ok: false, error: "请输入 6 位验证码" };
+
+    // 走后端验证，通过则拿到 token 并建立云会话
+    if (window.Cloud && Cloud.configured() && Cloud.serverBase()) {
+      try {
+        const r = await fetch(Cloud.serverBase() + "/auth/verify-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: phone, code: code })
+        });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || !d.ok) return { ok: false, error: (d && d.error) || "验证码不正确" };
+        // 登录成功：建立云会话
+        if (window.Cloud && typeof Cloud.__setSession === "function") {
+          Cloud.__setSession({
+            access_token: d.token,
+            expires_at: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+            user: d.user || null,
+            mode: "pyq"
+          });
+          try { await Cloud.init(); } catch (e) {}
+          if (window.App && App.render) App.render(true);
+        }
+        return { ok: true, me: d.user ? { phone: phone, name: d.user.name || "", masked: maskAccount(phone), member: {} } : null };
+      } catch (e) {
+        if (isNative) return call("authVerifyCode", [phone, code]);
+        return { ok: false, error: "验证服务不可用" };
+      }
+    }
+
     if (isNative) return call("authVerifyCode", [phone, code]);
 
     const acc = fakeAccounts();
-    if (!acc[phone]) return { ok: false, error: "该手机号还未注册，请先注册并设置密码" };
+    if (!acc[phone]) return { ok: false, error: "该账号还未注册，请先注册并设置密码" };
     const saved = sessionStorage.getItem("pyq_fake_code_" + phone) || "";
     if (!saved) return { ok: false, error: "请先获取验证码" };
     if (saved !== code) return { ok: false, error: "验证码不正确" };
@@ -6662,6 +6924,10 @@ window.SEED = {
     return '<div class="auth-field"><input id="' + id + '" type="' + type + '" placeholder="' + placeholder + '" ' + (extra || "") + " /></div>";
   }
 
+  function accountField() {
+    return '<div class="auth-field"><input id="authPhone" type="text" autocomplete="username" placeholder="手机号或邮箱" /></div>';
+  }
+
   function pwdStrengthHtml() {
     return (
       '<div class="pw-wrap">' +
@@ -6681,7 +6947,7 @@ window.SEED = {
     if (isReg) {
       body =
         field("authName", "text", "昵称（1-20 个字）", 'maxlength="20" autocomplete="nickname"') +
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         '<div class="auth-field"><input id="authPwd" type="password" autocomplete="new-password" placeholder="设置登录密码" oninput="Auth.pwdInput(this.value)" /></div>' +
         pwdStrengthHtml() +
         field("authPwd2", "password", "再次输入密码", 'autocomplete="new-password"') +
@@ -6689,16 +6955,16 @@ window.SEED = {
         '<div class="auth-foot">昵称可随时修改；注册后 7 天内免费使用全部功能</div>';
     } else if (isCode) {
       body =
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         '<div class="auth-field auth-code-row">' +
           '<input id="authCode" type="tel" inputmode="numeric" maxlength="6" placeholder="6 位验证码" oninput="this.value=this.value.replace(/\\D/g,\'\')" />' +
           '<button class="auth-send" id="authSendBtn" onclick="Auth.sendSmsCode()">获取验证码</button>' +
         "</div>" +
         '<button class="auth-submit" onclick="Auth.submit()">验证码登录</button>' +
-        '<div class="auth-foot">验证码 5 分钟内有效，仅已注册手机号可用</div>';
+        '<div class="auth-foot">验证码 5 分钟内有效，仅已注册账号可用；邮箱验证码 10 分钟有效</div>';
     } else {
       body =
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         field("authPwd", "password", "登录密码", 'autocomplete="current-password"') +
         '<button class="auth-submit" onclick="Auth.submit()">登录</button>' +
         '<div class="auth-foot">还没有账号？点上方「注册」免费试用 7 天</div>';
@@ -6707,7 +6973,7 @@ window.SEED = {
     overlayRoot.innerHTML =
       '<div class="auth-card">' +
         '<div class="auth-logo">朋友圈 AI 助手</div>' +
-        '<div class="auth-sub">昵称 + 手机号注册登录 · 首次注册免费试用 7 天</div>' +
+        '<div class="auth-sub">昵称 + 手机号/邮箱注册登录 · 首次注册免费试用 7 天</div>' +
         '<div class="auth-tabs">' +
           '<button class="auth-tab ' + (authMode === "pwd" ? "active" : "") + '" onclick="Auth.setMode(\'pwd\')">密码登录</button>' +
           '<button class="auth-tab ' + (authMode === "code" ? "active" : "") + '" onclick="Auth.setMode(\'code\')">验证码登录</button>' +
@@ -6748,14 +7014,14 @@ window.SEED = {
   }
 
   async function sendSmsCode() {
-    const phone = normPhone((document.getElementById("authPhone") || {}).value || "");
+    const phone = normAccount((document.getElementById("authPhone") || {}).value || "");
     const hint = document.getElementById("authHint");
-    if (!phoneOK(phone)) { setHint("请输入 11 位有效手机号"); return; }
+    if (!accountOK(phone)) { setHint("请输入有效的手机号或邮箱"); return; }
     if (countdown > 0) return;
     const r = await sendCode(phone);
     if (!r || !r.ok) { setHint((r && r.error) || "验证码发送失败"); return; }
     lastDevCode = r.devCode || "";
-    setHint(r.devCode ? "演示验证码：" + r.devCode + "（未接入短信网关，点提示自动填入）" : "验证码已发送", "dev");
+    setHint(r.devCode ? "演示验证码：" + r.devCode + "（未接入发送通道，点提示自动填入）" : (isEmail(phone) ? "验证码已发送到邮箱，请查收（含垃圾箱）" : "验证码已发送"), "dev");
     const hintEl = document.getElementById("authHint");
     if (hintEl && r.devCode) hintEl.onclick = () => { const c = document.getElementById("authCode"); if (c) c.value = r.devCode; };
     startCountdown(r.cooldown || 60);
@@ -6792,7 +7058,7 @@ window.SEED = {
   }
 
   async function submit() {
-    const phone = normPhone((document.getElementById("authPhone") || {}).value || "");
+    const phone = normAccount((document.getElementById("authPhone") || {}).value || "");
     const hint = document.getElementById("authHint");
     setHint("");
 
@@ -6806,7 +7072,7 @@ window.SEED = {
     }
 
     const pwd = (document.getElementById("authPwd") || {}).value || "";
-    if (!phoneOK(phone)) { setHint("请输入 11 位有效手机号"); return; }
+    if (!accountOK(phone)) { setHint("请输入有效的手机号或邮箱"); return; }
     const pe = pwdError(pwd);
     if (pe) { setHint(pe); return; }
 
@@ -7942,8 +8208,9 @@ window.SEED = {
       { id: "custom", name: "自定义服务器地址", base: "", model: "glm-4-flash", backend: true }
     ],
     image: [
+      { id: "backend", name: "自建服务器（推荐 · 免费）", mode: "backend", base: "", model: "cogview-3-flash", backend: true },
       { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
-      { id: "zhipu", name: "智谱 CogView（免费）", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
+      { id: "zhipu", name: "智谱直连 CogView", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
       { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
     ],
     video: [
@@ -8366,30 +8633,22 @@ window.SEED = {
     toast(p.mode === "free" ? "已切换到免费通道，无需填写 Key" : "已填入「" + p.name + "」，还需填写 API Key");
   }
 
-  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
-  async function generateFreeImage(prompt, size) {
-    const dim = String(size || "1024x1024").split("x");
-    const w = parseInt(dim[0], 10) || 1024;
-    const h = parseInt(dim[1], 10) || 1024;
-    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
-      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
-    toast("正在生成图片，请稍候…");
+  // 把生成好的图片 URL 存入素材库 / 相册 / 生成记录
+  async function applyGeneratedImage(url, prompt, sourceLabel) {
     let thumb = "";
     let saved = false;
     if (window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl) {
       const r = await NativeApp.saveMediaUrl(url, "AI图片_" + Date.now(), false);
-      if (!r || !r.ok) { toast((r && r.error) || "图片下载失败，请重试"); return; }
-      saved = true;
-      thumb = r.thumb || "";
+      if (r && r.ok) { saved = true; thumb = r.thumb || ""; }
     }
     const m = {
-      id: uid("img"), kind: "image", source: "AI 生成 · 免费通道", prompt: prompt,
+      id: uid("img"), kind: "image", source: sourceLabel || "AI 生成", prompt: prompt,
       src: thumb || url, url: url, saved: saved, time: nowISO()
     };
     store.materials.images.unshift(m);
     if (!save()) { m.src = m.url || ""; save(); }
     recordMedia({
-      kind: "image", status: "已通过", title: prompt, source: "AI 生成 · 免费通道",
+      kind: "image", status: "已通过", title: prompt, source: sourceLabel || "AI 生成",
       media: { src: m.src, url: m.url, prompt: prompt }
     });
     queueItem(
@@ -8398,6 +8657,16 @@ window.SEED = {
     );
     render();
     toast(saved ? "图片已生成并保存到手机相册" : "图片已生成，点图片可预览 / 保存");
+  }
+
+  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
+  async function generateFreeImage(prompt, size) {
+    const dim = String(size || "1024x1024").split("x");
+    const w = parseInt(dim[0], 10) || 1024;
+    const h = parseInt(dim[1], 10) || 1024;
+    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
+      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
+    await applyGeneratedImage(url, prompt, "AI 生成 · 免费通道");
   }
 
   async function generateImage() {
@@ -8429,6 +8698,32 @@ window.SEED = {
     // 免费通道：无需 Key，App 内下载入相册，网页版直接用图片地址
     if (cfg.mode === "free") {
       await generateFreeImage(prompt, cfg.size);
+      return;
+    }
+
+    // 自建后端代理：走 /images/generations，无需用户填 Key，App 和网页版都能用
+    if (cfg.mode === "backend" || cfg.backend) {
+      const base = aiServerBase() || cfg.base;
+      if (!base) { toast("请先在「云同步」里配置自建服务器地址"); return; }
+      toast("正在生成图片，请稍候…");
+      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = "Bearer " + token;
+        const res = await fetch(base + "/images/generations", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: cfg.model || "cogview-3-flash", prompt: prompt, size: cfg.size || "1024x1024" })
+        });
+        const txt = await res.text();
+        let d; try { d = JSON.parse(txt); } catch (e) { d = {}; }
+        if (!res.ok || !d) { toast("生成失败：HTTP " + res.status + " " + txt.slice(0, 80)); return; }
+        // 智谱返回格式：{ data: [{ url: "..." }] }
+        const url = (d.data && d.data[0] && d.data[0].url) || d.url || "";
+        if (!url) { toast("生成失败：未返回图片地址"); return; }
+        await applyGeneratedImage(url, prompt, "AI 生成");
+      } catch (e) {
+        toast("请求失败：" + ((e && e.message) || e));
+      }
       return;
     }
 
@@ -8819,13 +9114,11 @@ window.SEED = {
     );
   }
 
-  // AI 生成视频：智谱 CogVideoX 异步任务，原生侧创建 + 轮询
+  // AI 生成视频：智谱 CogVideoX 异步任务
   async function generateVideo() {
     const prompt = (document.getElementById("videoPrompt") || {}).value.trim();
     if (!prompt) { toast("先写画面描述"); return; }
     const cfg = aiCfg().video;
-    if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
-    if (!cfg.base) { toast(cfg.backend ? "请先配置后端代理地址" : "请先在「AI 模型接入」里配置视频模型和 Key"); return; }
 
     const check = Core.checkText(prompt);
     if (!check.passed) {
@@ -8841,12 +9134,59 @@ window.SEED = {
     }
 
     closeSheet();
+
+    // 自建后端代理：走 /videos/generations（异步）+ /async-result 轮询，无需用户填 Key
+    if (cfg.backend) {
+      const base = aiServerBase() || cfg.base;
+      if (!base) { toast("请先在「云同步」里配置自建服务器地址"); return; }
+      toast("视频生成中，约需 1-3 分钟，请保持页面…");
+      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      try {
+        const r1 = await fetch(base + "/videos/generations", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: cfg.model || "cogvideox-flash", prompt: prompt })
+        });
+        const d1 = await r1.json().catch(() => null);
+        if (!r1.ok || !d1 || !d1.id) { toast("生成失败：" + ((d1 && d1.error) || "HTTP " + r1.status)); return; }
+        const taskId = d1.id;
+        // 轮询结果，最多 3 分钟
+        let url = "";
+        for (let i = 0; i < 90; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const r2 = await fetch(base + "/videos/generations/" + encodeURIComponent(taskId), {
+            method: "GET", headers: { Authorization: "Bearer " + token }
+          });
+          const d2 = await r2.json().catch(() => null);
+          if (!r2.ok || !d2) continue;
+          if (d2.status === "succeed" || d2.status === "success") {
+            url = (d2.data && d2.data.video_url) || d2.video_url || "";
+            break;
+          }
+          if (d2.status === "failed") { toast("视频生成失败：" + (d2.error || "未知错误")); return; }
+        }
+        if (!url) { toast("视频生成超时，请稍后重试"); return; }
+        await applyGeneratedVideo(url, prompt);
+      } catch (e) {
+        toast("请求失败：" + ((e && e.message) || e));
+      }
+      return;
+    }
+
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.genVideo)) { toast("AI 生成视频需在 App 内使用"); return; }
+    if (!cfg.base) { toast("请先在「AI 模型接入」里配置视频模型和 Key"); return; }
+
     toast("视频生成中，约需 1-3 分钟，完成后自动保存…");
     const r = await NativeApp.genVideo(cfg.base, cfg.key, cfg.model, prompt);
     if (!r || !r.ok) { toast((r && r.error) || "视频生成失败"); return; }
-    const url = r.url || "";
+    await applyGeneratedVideo(r.url || "", prompt);
+  }
+
+  // 把生成好的视频 URL 存入素材库 / 相册 / 生成记录
+  async function applyGeneratedVideo(url, prompt) {
     let saved = false;
-    if (url && NativeApp.saveMediaUrl) {
+    if (url && window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl) {
       const s = await NativeApp.saveMediaUrl(url, "AI视频_" + Date.now(), true);
       saved = !!(s && s.ok);
     }
@@ -9222,7 +9562,7 @@ window.SEED = {
     aiPreset, aiToggleBackend, aiSaveSettings, aiTest, generateVideo, aiPresets: () => AI_PRESETS,
     previewImage, previewVideo, previewHistoryMedia,
     commitSchedule, doCommitSchedule, openSlotPicker, assignTopic, clearSlot,
-    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow,
+    saveCloudCfg, cloudAuth, cloudSignOut, cloudPushNow, cloudPullNow, toggleCloudAuto, buildPersonaNow, archiveImages, archiveVideos,
     editDiary, saveDiary, delDiary,
     videoSrc: (id) => {
       const v = store.materials.videos.find((x) => x.id === id);
@@ -9778,6 +10118,43 @@ window.SEED = {
     render();
   }
 
+  /* ---------- 本地归档：图片 / 视频批量保存到手机相册 ---------- */
+  async function archiveImages() {
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl)) {
+      toast("本地归档需在 App 内使用"); return;
+    }
+    const list = store.materials.images.filter((m) => !m.saved && (m.url || m.src));
+    if (!list.length) { toast("所有图片已归档到相册"); return; }
+    toast("正在归档 " + list.length + " 张图片…");
+    let ok = 0, fail = 0;
+    for (const m of list) {
+      const r = await NativeApp.saveMediaUrl(m.url || m.src, "图片_" + (m.id || Date.now()), false);
+      if (r && r.ok) { m.saved = true; if (r.thumb) m.src = r.thumb; ok++; }
+      else fail++;
+    }
+    save();
+    render();
+    toast("归档完成：成功 " + ok + " 张" + (fail ? "，失败 " + fail + " 张" : ""));
+  }
+
+  async function archiveVideos() {
+    if (!(window.NativeApp && NativeApp.available() && NativeApp.saveMediaUrl)) {
+      toast("本地归档需在 App 内使用"); return;
+    }
+    const list = store.materials.videos.filter((v) => !v.saved && v.url);
+    if (!list.length) { toast("所有视频已归档到相册"); return; }
+    toast("正在归档 " + list.length + " 个视频…");
+    let ok = 0, fail = 0;
+    for (const v of list) {
+      const r = await NativeApp.saveMediaUrl(v.url, "视频_" + (v.id || Date.now()), true);
+      if (r && r.ok) { v.saved = true; ok++; }
+      else fail++;
+    }
+    save();
+    render();
+    toast("归档完成：成功 " + ok + " 个" + (fail ? "，失败 " + fail + " 个" : ""));
+  }
+
   /* ---------- 我的日记 ---------- */
   function editDiary(id) {
     window.__diaryEditId = id || "";
@@ -9816,6 +10193,7 @@ window.SEED = {
     go("diary");
   }
 
+  // 日记页标签点击（心情/天气单选切换）
   function bindDiaryTags() {
     ["diaryMoods", "diaryWeathers"].forEach((cid) => {
       const wrap = document.getElementById(cid);
