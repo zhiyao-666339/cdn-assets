@@ -390,7 +390,8 @@ function smtpOpen() {
 }
 
 // 发送一封纯文本邮件：465 走隐式 TLS，587/25 自动 STARTTLS 升级
-async function smtpSend(to, subject, text) {
+// method: "login" | "plain"。163/QQ 只认 LOGIN，Gmail 两种都行
+async function smtpSendAuth(to, subject, text, method) {
   const st = await smtpOpen();
   try {
     let r = await st.expect();
@@ -418,13 +419,8 @@ async function smtpSend(to, subject, text) {
       if (r.charAt(0) !== "2") throw new Error("TLS 后 EHLO 失败：" + r);
     }
 
-    // 认证：优先 AUTH PLAIN，其次 AUTH LOGIN
-    if (/AUTH[^\n]*PLAIN/i.test(r)) {
-      const token = Buffer.from("\0" + SMTP_USER + "\0" + SMTP_PASS).toString("base64");
-      st.cmd("AUTH PLAIN " + token);
-      const ar = await st.expect();
-      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败：" + ar);
-    } else {
+    // 认证：163/QQ 只认 AUTH LOGIN；Gmail/Outlook 两种都行
+    if (method !== "plain") {
       st.cmd("AUTH LOGIN");
       let ar = await st.expect();
       if (ar.charAt(0) !== "3") throw new Error("SMTP 认证失败：" + ar);
@@ -433,7 +429,12 @@ async function smtpSend(to, subject, text) {
       if (ar.charAt(0) !== "3") throw new Error("SMTP 认证失败：" + ar);
       st.cmd(Buffer.from(SMTP_PASS).toString("base64"));
       ar = await st.expect();
-      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败（请检查授权码）：" + ar);
+      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败（授权码可能不对）：" + ar);
+    } else {
+      const token = Buffer.from("\0" + SMTP_USER + "\0" + SMTP_PASS).toString("base64");
+      st.cmd("AUTH PLAIN " + token);
+      const ar = await st.expect();
+      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败：" + ar);
     }
 
     st.cmd("MAIL FROM:<" + SMTP_FROM + ">");
@@ -469,6 +470,20 @@ async function smtpSend(to, subject, text) {
   } finally {
     if (st.dead) { try { st.sock.destroy(); } catch (e) {} }
   }
+}
+
+async function smtpSend(to, subject, text) {
+  let lastErr = null;
+  for (const method of ["login", "plain"]) {
+    try {
+      return await smtpSendAuth(to, subject, text, method);
+    } catch (e) {
+      lastErr = e;
+      // 只有「认证类」错误才换方式重试，其它错误（收件人被拒等）直接抛出
+      if (!/认证失败|authentication failed/i.test(String(e.message))) throw e;
+    }
+  }
+  throw lastErr;
 }
 
 async function sendMailCode(to, code) {
