@@ -14,6 +14,8 @@
  */
 
 const http = require("http");
+const net = require("net");
+const tls = require("tls");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -74,8 +76,20 @@ const SMS_SIGN = (process.env.SMS_SIGN || "").trim();        // 短信签名
 const SMS_TEMPLATE = (process.env.SMS_TEMPLATE || "").trim(); // 模板 code，如 SMS_xxx
 const SMS_CODE_TTL = 5 * 60 * 1000;   // 验证码 5 分钟有效
 const SMS_COOLDOWN = 60 * 1000;       // 同一手机号 60 秒冷却
-// 内存验证码存储：{ phone: { code, exp, lastSend } }
+// 内存验证码存储：{ account: { code, exp, lastSend } }
 const smsStore = new Map();
+
+// 邮箱验证码：零依赖 SMTP。配置 SMTP_HOST/SMTP_USER/SMTP_PASS 即可启用，
+// 未配置时同样走「开发模式」，验证码随响应返回。
+const SMTP_HOST = (process.env.SMTP_HOST || "").trim();
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465) || 465;
+const SMTP_USER = (process.env.SMTP_USER || "").trim();
+const SMTP_PASS = (process.env.SMTP_PASS || "").trim();
+const SMTP_FROM = (process.env.SMTP_FROM || SMTP_USER).trim();
+const SMTP_SECURE = process.env.SMTP_SECURE
+  ? /^(1|true|yes|ssl|tls|on)$/i.test(String(process.env.SMTP_SECURE).trim())
+  : SMTP_PORT === 465;
+const MAIL_CODE_TTL = 10 * 60 * 1000; // 邮箱验证码 10 分钟有效
 
 // 只放行这几个模型，避免代理被拿去做别的事
 const CHAT_MODELS = new Set(["glm-4-flash", "glm-4-air", "glm-4-plus", "glm-4v-flash"]);
@@ -316,6 +330,164 @@ async function tencentSms(phone, code) {
   const status = resp.SendStatusSet && resp.SendStatusSet[0];
   if (status && status.Code !== "Ok") throw new Error(status.Message || status.Code);
   return { ok: true };
+}
+
+/* ---------------- 邮箱验证码（零依赖 SMTP） ---------------- */
+
+function mailReady() {
+  return !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
+}
+
+// 在 socket 上挂一个「按行读取 + 按需等待」的会话器
+function smtpAttach(st) {
+  st.buf = "";
+  st.lines = [];
+  st.sock.setEncoding("utf8");
+  const wake = (err) => {
+    const ws = st.waiters.splice(0);
+    ws.forEach((w) => (err ? w.reject(err) : null));
+  };
+  st.onData = (d) => {
+    st.buf += d;
+    let idx;
+    while ((idx = st.buf.indexOf("\n")) >= 0) {
+      const line = st.buf.slice(0, idx).replace(/\r$/, "");
+      st.buf = st.buf.slice(idx + 1);
+      if (!/^\d{3}/.test(line)) continue;
+      st.lines.push(line);
+      if (line.charAt(3) === "-") continue; // 多行响应，等最后一行
+      const w = st.waiters.shift();
+      const joined = st.lines.join("\n");
+      st.lines = [];
+      if (w) w.resolve(joined);
+    }
+  };
+  st.onErr = (e) => { st.dead = true; wake(e instanceof Error ? e : new Error(String(e))); };
+  st.sock.on("data", st.onData);
+  st.sock.on("error", st.onErr);
+  st.sock.on("close", () => st.onErr(new Error("SMTP 连接已关闭")));
+  st.expect = () => new Promise((resolve, reject) => st.waiters.push({ resolve, reject }));
+  st.cmd = (line) => st.sock.write(line + "\r\n");
+}
+
+function smtpDetach(st) {
+  try { st.sock.removeAllListeners("data"); } catch (e) {}
+  try { st.sock.removeAllListeners("error"); } catch (e) {}
+  try { st.sock.removeAllListeners("close"); } catch (e) {}
+}
+
+function smtpOpen() {
+  return new Promise((resolve, reject) => {
+    const st = { sock: null, waiters: [], dead: false };
+    st.sock = SMTP_SECURE
+      ? tls.connect({ host: SMTP_HOST, port: SMTP_PORT, servername: SMTP_HOST })
+      : net.connect({ host: SMTP_HOST, port: SMTP_PORT });
+    smtpAttach(st);
+    const onReady = () => resolve(st);
+    st.sock.once("error", reject);
+    st.sock.once(SMTP_SECURE ? "secureConnect" : "connect", onReady);
+  });
+}
+
+// 发送一封纯文本邮件：465 走隐式 TLS，587/25 自动 STARTTLS 升级
+async function smtpSend(to, subject, text) {
+  const st = await smtpOpen();
+  try {
+    let r = await st.expect();
+    if (r.charAt(0) !== "2") throw new Error("SMTP 握手失败：" + r);
+
+    st.cmd("EHLO pyq-assistant");
+    r = await st.expect();
+    if (r.charAt(0) !== "2") throw new Error("EHLO 失败：" + r);
+
+    // 非 465 端口：服务器声明支持 STARTTLS 就升级
+    if (!SMTP_SECURE && /STARTTLS/i.test(r)) {
+      st.cmd("STARTTLS");
+      const sr = await st.expect();
+      if (sr.charAt(0) !== "2") throw new Error("STARTTLS 失败：" + sr);
+      smtpDetach(st);
+      const plain = st.sock;
+      st.sock = tls.connect({ socket: plain, servername: SMTP_HOST });
+      smtpAttach(st);
+      await new Promise((res, rej) => {
+        st.sock.once("secureConnect", res);
+        st.sock.once("error", rej);
+      });
+      st.cmd("EHLO pyq-assistant");
+      r = await st.expect();
+      if (r.charAt(0) !== "2") throw new Error("TLS 后 EHLO 失败：" + r);
+    }
+
+    // 认证：优先 AUTH PLAIN，其次 AUTH LOGIN
+    if (/AUTH[^\n]*PLAIN/i.test(r)) {
+      const token = Buffer.from("\0" + SMTP_USER + "\0" + SMTP_PASS).toString("base64");
+      st.cmd("AUTH PLAIN " + token);
+      const ar = await st.expect();
+      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败：" + ar);
+    } else {
+      st.cmd("AUTH LOGIN");
+      let ar = await st.expect();
+      if (ar.charAt(0) !== "3") throw new Error("SMTP 认证失败：" + ar);
+      st.cmd(Buffer.from(SMTP_USER).toString("base64"));
+      ar = await st.expect();
+      if (ar.charAt(0) !== "3") throw new Error("SMTP 认证失败：" + ar);
+      st.cmd(Buffer.from(SMTP_PASS).toString("base64"));
+      ar = await st.expect();
+      if (ar.charAt(0) !== "2") throw new Error("SMTP 认证失败（请检查授权码）：" + ar);
+    }
+
+    st.cmd("MAIL FROM:<" + SMTP_FROM + ">");
+    r = await st.expect();
+    if (r.charAt(0) !== "2") throw new Error("MAIL FROM 被拒：" + r);
+
+    st.cmd("RCPT TO:<" + to + ">");
+    r = await st.expect();
+    if (r.charAt(0) !== "2") throw new Error("收件地址被拒：" + r);
+
+    st.cmd("DATA");
+    r = await st.expect();
+    if (r.charAt(0) !== "3") throw new Error("DATA 被拒：" + r);
+
+    const body = Buffer.from(text, "utf8").toString("base64").replace(/(.{76})/g, "$1\r\n");
+    const head = [
+      "From: 朋友圈AI助手 <" + SMTP_FROM + ">",
+      "To: <" + to + ">",
+      "Subject: =?UTF-8?B?" + Buffer.from(subject, "utf8").toString("base64") + "?=",
+      "Date: " + new Date().toUTCString(),
+      "Message-ID: <" + Date.now() + "." + crypto.randomBytes(6).toString("hex") + "@pyq>",
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: base64"
+    ].join("\r\n");
+    st.sock.write(head + "\r\n\r\n" + body + "\r\n.\r\n");
+    r = await st.expect();
+    if (r.charAt(0) !== "2") throw new Error("邮件正文被拒：" + r);
+
+    try { st.cmd("QUIT"); } catch (e) {}
+    try { st.sock.end(); } catch (e) {}
+    return { ok: true };
+  } finally {
+    if (st.dead) { try { st.sock.destroy(); } catch (e) {} }
+  }
+}
+
+async function sendMailCode(to, code) {
+  if (!mailReady()) return { ok: true, dev: true, devCode: code };
+  const minutes = Math.floor(MAIL_CODE_TTL / 60000);
+  const text =
+    "您好！\n\n" +
+    "您正在登录「朋友圈 AI 助手」，本次验证码是：\n\n" +
+    "        " + code + "\n\n" +
+    "验证码 " + minutes + " 分钟内有效，请勿转发给他人。\n" +
+    "如果这不是您本人的操作，请忽略本邮件。\n\n" +
+    "—— 朋友圈 AI 助手\n";
+  try {
+    await smtpSend(to, "朋友圈 AI 助手 · 登录验证码 " + code, text);
+    return { ok: true };
+  } catch (e) {
+    console.error("[MAIL] 发送失败:", e.message);
+    return { ok: false, error: "邮件发送失败：" + e.message };
+  }
 }
 
 function verifyToken(token) {
@@ -933,6 +1105,7 @@ const server = http.createServer(async (req, res) => {
       users: listUsers().length,
       feishu: (FEISHU_APP_ID && FEISHU_APP_SECRET && FEISHU_FOLDER) ? "on" : "off",
       sms: smsReady() ? SMS_PROVIDER : "dev",
+      mail: mailReady() ? "on" : "dev",
       store: remoteEnabled() ? "feishu" : "local",
       restored: lastRestore,
       time: new Date().toISOString()
@@ -1009,52 +1182,58 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 发送短信验证码：手机号必须已注册；开发模式直接返回验证码
+    // 发送验证码：支持手机号或邮箱，账号必须已注册；未配置网关时走开发模式
     if (pathname === "/auth/send-code" && method === "POST") {
       const body = await readJson(req);
-      const phone = normAccount(body.phone || body.account);
-      if (!accountOK(phone)) { send(res, 400, { ok: false, error: "请输入 11 位有效手机号" }); return; }
-      if (!readUser(phone)) { send(res, 404, { ok: false, error: "该手机号未注册，请先注册" }); return; }
+      const acc = normAccount(body.phone || body.account || body.email);
+      const isMail = acc.indexOf("@") >= 0;
+      if (!accountOK(acc)) { send(res, 400, { ok: false, error: "请输入有效的手机号或邮箱" }); return; }
+      if (!readUser(acc)) {
+        send(res, 404, { ok: false, error: isMail ? "该邮箱未注册，请先注册" : "该手机号未注册，请先注册" });
+        return;
+      }
       const now = Date.now();
-      const cached = smsStore.get(phone);
+      const cached = smsStore.get(acc);
       if (cached && now - cached.lastSend < SMS_COOLDOWN) {
         send(res, 429, { ok: false, error: "发送过于频繁，请 60 秒后再试" });
         return;
       }
       const code = genCode();
-      const r = await sendSms(phone, code);
+      const ttl = isMail ? MAIL_CODE_TTL : SMS_CODE_TTL;
+      const r = isMail ? await sendMailCode(acc, code) : await sendSms(acc, code);
       if (!r.ok) { send(res, 502, { ok: false, error: r.error || "发送失败" }); return; }
-      smsStore.set(phone, { code, exp: now + SMS_CODE_TTL, lastSend: now });
+      smsStore.set(acc, { code, exp: now + ttl, lastSend: now });
       send(res, 200, {
         ok: true,
+        channel: isMail ? "email" : "sms",
         dev: !!r.dev,
         devCode: r.devCode || "",
-        ttl: SMS_CODE_TTL / 1000,
+        ttl: ttl / 1000,
         cooldown: SMS_COOLDOWN / 1000
       });
       return;
     }
 
-    // 验证码登录：验证通过直接签发 token
+    // 验证码登录：验证通过直接签发 token（手机号 / 邮箱通用）
     if (pathname === "/auth/verify-code" && method === "POST") {
       const body = await readJson(req);
-      const phone = normAccount(body.phone || body.account);
+      const acc = normAccount(body.phone || body.account || body.email);
       const code = String(body.code || "").replace(/\D/g, "");
-      if (!accountOK(phone)) { send(res, 400, { ok: false, error: "请输入 11 位有效手机号" }); return; }
+      if (!accountOK(acc)) { send(res, 400, { ok: false, error: "请输入有效的手机号或邮箱" }); return; }
       if (code.length !== 6) { send(res, 400, { ok: false, error: "请输入 6 位验证码" }); return; }
-      const cached = smsStore.get(phone);
+      const cached = smsStore.get(acc);
       if (!cached) { send(res, 400, { ok: false, error: "请先获取验证码" }); return; }
       if (cached.exp < Date.now()) {
-        smsStore.delete(phone);
+        smsStore.delete(acc);
         send(res, 400, { ok: false, error: "验证码已过期，请重新获取" }); return;
       }
       if (cached.code !== code) { send(res, 400, { ok: false, error: "验证码不正确" }); return; }
-      const record = readUser(phone);
-      if (!record) { send(res, 404, { ok: false, error: "该手机号未注册" }); return; }
-      smsStore.delete(phone);
+      const record = readUser(acc);
+      if (!record) { send(res, 404, { ok: false, error: "该账号未注册" }); return; }
+      smsStore.delete(acc);
       send(res, 200, {
         ok: true,
-        token: signToken(phone),
+        token: signToken(acc),
         user: record.user,
         updatedAt: record.updatedAt || "",
         persona: { digest: record.personaDigest || "", hash: record.personaHash || "", lastLearnAt: record.lastLearnAt || "" }

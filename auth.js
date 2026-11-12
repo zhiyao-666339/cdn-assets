@@ -89,6 +89,26 @@
   }
   function normPhone(p) { return String(p || "").replace(/\D/g, ""); }
   function phoneOK(p) { return /^1\d{10}$/.test(p); }
+  // 账号：手机号或邮箱。含 @ 视为邮箱（转小写、去空格），否则按手机号处理
+  function normAccount(v) {
+    const s = String(v || "").trim();
+    return s.indexOf("@") >= 0 ? s.toLowerCase() : s.replace(/\D/g, "");
+  }
+  function accountOK(a) {
+    if (!a) return false;
+    if (a.indexOf("@") >= 0) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a);
+    return /^1\d{10}$/.test(a);
+  }
+  function isEmail(a) { return String(a || "").indexOf("@") >= 0; }
+  function maskAccount(a) {
+    if (isEmail(a)) {
+      const i = a.indexOf("@");
+      const name = a.slice(0, i);
+      const head = name.slice(0, Math.min(2, name.length));
+      return head + "***" + a.slice(i);
+    }
+    return a.slice(0, 3) + "****" + a.slice(7);
+  }
   function pwdOK(p) { return !!p && p.length >= 6 && p.length <= 32 && !/\s/.test(p); }
   function pwdError(p) {
     if (!p) return "请设置登录密码";
@@ -135,7 +155,7 @@
     return {
       phone: phone,
       name: acc.name || "",
-      masked: phone.slice(0, 3) + "****" + phone.slice(7),
+      masked: maskAccount(phone),
       member: fakeMember(acc)
     };
   }
@@ -192,8 +212,8 @@
   }
 
   async function login(phone, password) {
-    phone = normPhone(phone);
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    phone = normAccount(phone);
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     const e = pwdError(password);
     if (e) return { ok: false, error: e };
     if (isNative) {
@@ -218,7 +238,7 @@
         autoCloudSync(phone, password);
         return { ok: true, me: fakeMe(phone, acc[phone]), cloud: true, msg: "已通过云端账号登录" };
       }
-      if (!acc[phone]) return { ok: false, error: "该手机号未注册，请先注册" };
+      if (!acc[phone]) return { ok: false, error: "该账号未注册，请先注册" };
       return { ok: false, error: "密码错误" };
     }
     localStorage.setItem(FAKE_SESSION, phone);
@@ -227,9 +247,9 @@
   }
 
   async function register(phone, nickname, password) {
-    phone = normPhone(phone);
+    phone = normAccount(phone);
     nickname = String(nickname || "").trim();
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     const ne = nickError(nickname);
     if (ne) return { ok: false, error: ne };
     const e = pwdError(password);
@@ -241,7 +261,7 @@
     }
 
     const acc = fakeAccounts();
-    if (acc[phone]) return { ok: false, error: "该手机号已注册，请直接登录" };
+    if (acc[phone]) return { ok: false, error: "该账号已注册，请直接登录" };
     acc[phone] = { name: nickname, hash: fakeSha(password), trialStart: Date.now(), tier: 0, expires: 0, pending: 0 };
     fakeSave(acc);
     localStorage.setItem(FAKE_SESSION, phone);
@@ -301,8 +321,9 @@
   }
 
   async function sendCode(phone) {
-    phone = normPhone(phone);
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    phone = normAccount(phone);
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
+    const mail = isEmail(phone);
 
     // 优先走自建后端验证码接口（支持真短信网关 + 开发模式 devCode）
     if (window.Cloud && Cloud.configured() && Cloud.serverBase()) {
@@ -332,16 +353,16 @@
 
     // 纯网页版无后端兜底：本地模拟
     const acc = fakeAccounts();
-    if (!acc[phone]) return { ok: false, error: "该手机号还未注册，请先注册并设置密码" };
+    if (!acc[phone]) return { ok: false, error: mail ? "该邮箱还未注册，请先注册并设置密码" : "该手机号还未注册，请先注册并设置密码" };
     const code = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
     sessionStorage.setItem("pyq_fake_code_" + phone, code);
     return { ok: true, devCode: code, dev: true, ttl: 300, cooldown: 60 };
   }
 
   async function verifyCode(phone, code) {
-    phone = normPhone(phone);
+    phone = normAccount(phone);
     code = String(code || "").replace(/\D/g, "");
-    if (!phoneOK(phone)) return { ok: false, error: "请输入 11 位有效手机号" };
+    if (!accountOK(phone)) return { ok: false, error: "请输入有效的手机号或邮箱" };
     if (code.length !== 6) return { ok: false, error: "请输入 6 位验证码" };
 
     // 走后端验证，通过则拿到 token 并建立云会话
@@ -365,7 +386,7 @@
           try { await Cloud.init(); } catch (e) {}
           if (window.App && App.render) App.render(true);
         }
-        return { ok: true, me: d.user ? { phone: phone, name: d.user.name || "", masked: phone.slice(0, 3) + "****" + phone.slice(7), member: {} } : null };
+        return { ok: true, me: d.user ? { phone: phone, name: d.user.name || "", masked: maskAccount(phone), member: {} } : null };
       } catch (e) {
         if (isNative) return call("authVerifyCode", [phone, code]);
         return { ok: false, error: "验证服务不可用" };
@@ -375,7 +396,7 @@
     if (isNative) return call("authVerifyCode", [phone, code]);
 
     const acc = fakeAccounts();
-    if (!acc[phone]) return { ok: false, error: "该手机号还未注册，请先注册并设置密码" };
+    if (!acc[phone]) return { ok: false, error: "该账号还未注册，请先注册并设置密码" };
     const saved = sessionStorage.getItem("pyq_fake_code_" + phone) || "";
     if (!saved) return { ok: false, error: "请先获取验证码" };
     if (saved !== code) return { ok: false, error: "验证码不正确" };
@@ -525,6 +546,10 @@
     return '<div class="auth-field"><input id="' + id + '" type="' + type + '" placeholder="' + placeholder + '" ' + (extra || "") + " /></div>";
   }
 
+  function accountField() {
+    return '<div class="auth-field"><input id="authPhone" type="text" autocomplete="username" placeholder="手机号或邮箱" /></div>';
+  }
+
   function pwdStrengthHtml() {
     return (
       '<div class="pw-wrap">' +
@@ -544,7 +569,7 @@
     if (isReg) {
       body =
         field("authName", "text", "昵称（1-20 个字）", 'maxlength="20" autocomplete="nickname"') +
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         '<div class="auth-field"><input id="authPwd" type="password" autocomplete="new-password" placeholder="设置登录密码" oninput="Auth.pwdInput(this.value)" /></div>' +
         pwdStrengthHtml() +
         field("authPwd2", "password", "再次输入密码", 'autocomplete="new-password"') +
@@ -552,16 +577,16 @@
         '<div class="auth-foot">昵称可随时修改；注册后 7 天内免费使用全部功能</div>';
     } else if (isCode) {
       body =
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         '<div class="auth-field auth-code-row">' +
           '<input id="authCode" type="tel" inputmode="numeric" maxlength="6" placeholder="6 位验证码" oninput="this.value=this.value.replace(/\\D/g,\'\')" />' +
           '<button class="auth-send" id="authSendBtn" onclick="Auth.sendSmsCode()">获取验证码</button>' +
         "</div>" +
         '<button class="auth-submit" onclick="Auth.submit()">验证码登录</button>' +
-        '<div class="auth-foot">验证码 5 分钟内有效，仅已注册手机号可用</div>';
+        '<div class="auth-foot">验证码 5 分钟内有效，仅已注册账号可用；邮箱验证码 10 分钟有效</div>';
     } else {
       body =
-        field("authPhone", "tel", "手机号（11 位）", 'inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/\\D/g,\'\')"') +
+        accountField() +
         field("authPwd", "password", "登录密码", 'autocomplete="current-password"') +
         '<button class="auth-submit" onclick="Auth.submit()">登录</button>' +
         '<div class="auth-foot">还没有账号？点上方「注册」免费试用 7 天</div>';
@@ -570,7 +595,7 @@
     overlayRoot.innerHTML =
       '<div class="auth-card">' +
         '<div class="auth-logo">朋友圈 AI 助手</div>' +
-        '<div class="auth-sub">昵称 + 手机号注册登录 · 首次注册免费试用 7 天</div>' +
+        '<div class="auth-sub">昵称 + 手机号/邮箱注册登录 · 首次注册免费试用 7 天</div>' +
         '<div class="auth-tabs">' +
           '<button class="auth-tab ' + (authMode === "pwd" ? "active" : "") + '" onclick="Auth.setMode(\'pwd\')">密码登录</button>' +
           '<button class="auth-tab ' + (authMode === "code" ? "active" : "") + '" onclick="Auth.setMode(\'code\')">验证码登录</button>' +
@@ -611,14 +636,14 @@
   }
 
   async function sendSmsCode() {
-    const phone = normPhone((document.getElementById("authPhone") || {}).value || "");
+    const phone = normAccount((document.getElementById("authPhone") || {}).value || "");
     const hint = document.getElementById("authHint");
-    if (!phoneOK(phone)) { setHint("请输入 11 位有效手机号"); return; }
+    if (!accountOK(phone)) { setHint("请输入有效的手机号或邮箱"); return; }
     if (countdown > 0) return;
     const r = await sendCode(phone);
     if (!r || !r.ok) { setHint((r && r.error) || "验证码发送失败"); return; }
     lastDevCode = r.devCode || "";
-    setHint(r.devCode ? "演示验证码：" + r.devCode + "（未接入短信网关，点提示自动填入）" : "验证码已发送", "dev");
+    setHint(r.devCode ? "演示验证码：" + r.devCode + "（未接入发送通道，点提示自动填入）" : (isEmail(phone) ? "验证码已发送到邮箱，请查收（含垃圾箱）" : "验证码已发送"), "dev");
     const hintEl = document.getElementById("authHint");
     if (hintEl && r.devCode) hintEl.onclick = () => { const c = document.getElementById("authCode"); if (c) c.value = r.devCode; };
     startCountdown(r.cooldown || 60);
@@ -655,7 +680,7 @@
   }
 
   async function submit() {
-    const phone = normPhone((document.getElementById("authPhone") || {}).value || "");
+    const phone = normAccount((document.getElementById("authPhone") || {}).value || "");
     const hint = document.getElementById("authHint");
     setHint("");
 
@@ -669,7 +694,7 @@
     }
 
     const pwd = (document.getElementById("authPwd") || {}).value || "";
-    if (!phoneOK(phone)) { setHint("请输入 11 位有效手机号"); return; }
+    if (!accountOK(phone)) { setHint("请输入有效的手机号或邮箱"); return; }
     const pe = pwdError(pwd);
     if (pe) { setHint(pe); return; }
 
