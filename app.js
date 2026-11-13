@@ -85,7 +85,7 @@
     ui.compose = {
       typeId: id, mode: "ai", size: "short", topic: Core.topicFor(id), styles: [], materialIds: [],
       text: "", result: "", check: null, variant: 0, replaced: false,
-      fixedText: "", loading: false, blockId: "", slotId: "", histId: ""
+      fixedText: "", loading: false, blockId: "", slotId: "", histId: "", photo: ""
     };
     go("compose");
   }
@@ -129,6 +129,65 @@
     const i = c.styles.indexOf(id);
     if (i >= 0) c.styles.splice(i, 1); else c.styles.push(id);
     render();
+  }
+
+  /* ---------- 照片生成文案 ---------- */
+  function pickComposePhoto() {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.onchange = function () {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { toast("照片不能超过 5MB"); return; }
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const c = ensureCompose();
+        c.photo = e.target.result; // dataURL
+        render();
+      };
+      reader.readAsDataURL(f);
+    };
+    inp.click();
+  }
+  function clearComposePhoto() {
+    ensureCompose().photo = "";
+    render();
+  }
+
+  // 根据照片生成朋友圈文案：调后端 /ai/vision（智谱视觉模型）
+  async function generateFromPhoto() {
+    const c = ensureCompose();
+    if (!c.photo) { toast("先上传一张照片"); return; }
+    c.loading = true;
+    c.replaced = false;
+    render();
+    const cfg = aiCfg().text;
+    const base = aiBaseOf(cfg);
+    if (!base) { c.loading = false; render(); toast("未配置后端地址"); return; }
+    const digest = String((store && store.personaDigest) || "").trim();
+    try {
+      const headers = { "Content-Type": "application/json" };
+      const auth = aiAuthOf(cfg);
+      if (auth) headers["Authorization"] = "Bearer " + auth;
+      if (cfg.backend && cfg.key) headers["X-Pyq-Token"] = cfg.key;
+      const res = await fetch(base + "/ai/vision", {
+        method: "POST", headers: headers,
+        body: JSON.stringify({ image: c.photo, persona: digest, prompt: c.topic || "" })
+      });
+      const data = await res.json();
+      if (data.ok && data.text) {
+        finishCompose(c, cleanAIText(data.text));
+      } else {
+        c.loading = false;
+        render();
+        toast("照片生成失败：" + (data.error || "未知错误"));
+      }
+    } catch (e) {
+      c.loading = false;
+      render();
+      toast("网络错误：" + (e.message || "请检查后端连接"));
+    }
   }
 
   function toggleMaterial(id) {
@@ -2160,6 +2219,7 @@
   window.App = {
     tab, go, back, render, toast,
     pickType, setMode, setSize, setTopic, setDraftText, toggleStyle, toggleMaterial,
+    pickComposePhoto, clearComposePhoto, generateFromPhoto,
     generate, polish, applyFix, copy, saveDraft, toMaterials, addToSchedule, openDraft,
     setTopicFilter, openTopicPicker, useTopic, topicToCompose, openTopicSheet, saveTopic,
     setTopicScope, editTopic, updateTopic, delTopic, confirmDelTopic, copyTopic,

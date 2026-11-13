@@ -1367,6 +1367,52 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 根据照片生成朋友圈文案：接收 base64 图片 + 用户画像，调智谱视觉模型
+    if (pathname === "/ai/vision" && method === "POST") {
+      if (!ZHIPU_KEY) { send(res, 503, { error: "服务器未配置模型 Key" }); return; }
+      const body = await readJson(req);
+      const image = String(body.image || "").trim();
+      if (!image) { send(res, 400, { error: "image 不能为空（base64 或 dataURL）" }); return; }
+      // 统一转为 dataURL 格式
+      const dataUrl = image.startsWith("data:") ? image : "data:image/jpeg;base64," + image;
+      // 限制图片大小（base64 约 5MB → 原图约 3.7MB）
+      if (dataUrl.length > 7 * 1024 * 1024) { send(res, 400, { error: "图片太大，请压缩后再上传（建议 3MB 以内）" }); return; }
+      const persona = String(body.persona || "").slice(0, 1500);
+      const hint = String(body.prompt || "").slice(0, 300);
+      const sysText = "你是朋友圈文案助手。根据用户上传的照片，写一条适合发朋友圈的文案。\n" +
+        "要求：\n" +
+        "1. 文案要贴合照片内容（场景、物品、氛围），不要泛泛而谈\n" +
+        "2. 口语化、真实自然，像普通人发朋友圈，不要像广告\n" +
+        "3. 长度 50-150 字，可适当用 emoji\n" +
+        "4. 直接输出文案本身，不要加引号、不要加解释、不要加「文案：」前缀\n" +
+        (persona ? "5. 用户画像（参考语气风格）：" + persona + "\n" : "") +
+        (hint ? "6. 用户补充说明：" + hint + "\n" : "");
+      const payload = {
+        model: "glm-4v-flash",
+        messages: [
+          { role: "system", content: sysText },
+          { role: "user", content: [
+            { type: "text", text: "请根据这张照片写一条朋友圈文案。" },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ]}
+        ],
+        stream: false,
+        temperature: 0.85,
+        max_tokens: 500
+      };
+      const r = await upstream("/chat/completions", { method: "POST", body: JSON.stringify(payload) }, 90000);
+      // 解析返回，提取文案文本
+      try {
+        const data = JSON.parse(r.text);
+        const text = (((data.choices || [])[0] || {}).message || {}).content || "";
+        if (text) { send(res, 200, { ok: true, text: text.trim() }); return; }
+        send(res, r.status, { ok: false, error: "模型未返回内容", raw: r.text.slice(0, 500) });
+      } catch (e) {
+        send(res, r.status, null, r.text);
+      }
+      return;
+    }
+
     if (pathname === "/videos/generations" && method === "POST") {
       if (!ZHIPU_KEY) { send(res, 503, { error: "服务器未配置模型 Key" }); return; }
       const body = await readJson(req);

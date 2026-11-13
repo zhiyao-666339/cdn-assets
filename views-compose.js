@@ -68,11 +68,26 @@
         '<textarea class="textarea" id="composeInput" rows="6" placeholder="写下这次的选题 / 想写的事，例如：我普通的一天" oninput="App.setTopic(this.value)">' + Core.escapeHtml(c.topic) + "</textarea>" +
       "</div>" +
 
+      // 照片生成文案：上传照片 → AI 识别照片内容写文案
+      '<div class="photo-compose">' +
+        (c.photo
+          ? '<div class="photo-preview">' +
+              '<img src="' + c.photo + '" alt="已选照片">' +
+              '<button class="photo-remove" onclick="App.clearComposePhoto()">✕</button>' +
+            "</div>"
+          : '<button class="photo-upload-btn" onclick="App.pickComposePhoto()">' +
+              icon("image", 18) + '<span>上传照片，AI 根据照片写文案</span>' +
+            "</button>") +
+      "</div>" +
+
       // 文风调节（缩小，放在输入框下方）
       '<div class="chips">' + styleChips + "</div>" +
 
-      '<button class="btn primary block" onclick="App.generate()">' +
-        icon("spark", 17) + (c.result ? "重新生成" : "生成文案") + "</button>" +
+      (c.photo
+        ? '<button class="btn primary block" onclick="App.generateFromPhoto()">' +
+            icon("image", 17) + (c.result ? "重新根据照片生成" : "根据照片生成文案") + "</button>"
+        : '<button class="btn primary block" onclick="App.generate()">' +
+            icon("spark", 17) + (c.result ? "重新生成" : "生成文案") + "</button>") +
       '<div class="hint">' + icon("shield", 13) + "<span>生成后自动检测，命中违规会立即拦截，并给出可替换版本。</span></div>"
     );
   }

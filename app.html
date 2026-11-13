@@ -577,6 +577,35 @@ body {
 .compose-page .field { margin-bottom: 14px; }
 .compose-page .seg { margin-bottom: 16px; }
 .compose-page .chips { margin-bottom: 16px; }
+
+/* 照片生成文案 */
+.photo-compose { margin-bottom: 12px; }
+.photo-upload-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 16px 14px;
+  border: 1.5px dashed var(--line); border-radius: 12px;
+  background: rgba(0,0,0,.02); color: var(--sub);
+  font-size: 13px; cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.photo-upload-btn:active { background: rgba(0,0,0,.06); }
+.photo-preview {
+  position: relative; width: 100%; max-height: 200px;
+  border-radius: 12px; overflow: hidden;
+  background: #f0f0f0;
+}
+.photo-preview img {
+  width: 100%; height: 200px; object-fit: cover;
+  border-radius: 12px; display: block;
+}
+.photo-remove {
+  position: absolute; top: 8px; right: 8px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(0,0,0,.55); color: #fff;
+  border: none; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
 .compose-page .btn.block { margin-bottom: 8px; }
 .field label { font-size: 12px; color: var(--sub); display: block; margin-bottom: 7px; }
 .input, .textarea, select.input {
@@ -2006,8 +2035,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 35,
-  APP_VERSION_NAME: "1.16.1",
+  APP_VERSION_CODE: 37,
+  APP_VERSION_NAME: "1.17.0",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -4182,11 +4211,26 @@ window.SEED = {
         '<textarea class="textarea" id="composeInput" rows="6" placeholder="写下这次的选题 / 想写的事，例如：我普通的一天" oninput="App.setTopic(this.value)">' + Core.escapeHtml(c.topic) + "</textarea>" +
       "</div>" +
 
+      // 照片生成文案：上传照片 → AI 识别照片内容写文案
+      '<div class="photo-compose">' +
+        (c.photo
+          ? '<div class="photo-preview">' +
+              '<img src="' + c.photo + '" alt="已选照片">' +
+              '<button class="photo-remove" onclick="App.clearComposePhoto()">✕</button>' +
+            "</div>"
+          : '<button class="photo-upload-btn" onclick="App.pickComposePhoto()">' +
+              icon("image", 18) + '<span>上传照片，AI 根据照片写文案</span>' +
+            "</button>") +
+      "</div>" +
+
       // 文风调节（缩小，放在输入框下方）
       '<div class="chips">' + styleChips + "</div>" +
 
-      '<button class="btn primary block" onclick="App.generate()">' +
-        icon("spark", 17) + (c.result ? "重新生成" : "生成文案") + "</button>" +
+      (c.photo
+        ? '<button class="btn primary block" onclick="App.generateFromPhoto()">' +
+            icon("image", 17) + (c.result ? "重新根据照片生成" : "根据照片生成文案") + "</button>"
+        : '<button class="btn primary block" onclick="App.generate()">' +
+            icon("spark", 17) + (c.result ? "重新生成" : "生成文案") + "</button>") +
       '<div class="hint">' + icon("shield", 13) + "<span>生成后自动检测，命中违规会立即拦截，并给出可替换版本。</span></div>"
     );
   }
@@ -7490,7 +7534,7 @@ window.SEED = {
     ui.compose = {
       typeId: id, mode: "ai", size: "short", topic: Core.topicFor(id), styles: [], materialIds: [],
       text: "", result: "", check: null, variant: 0, replaced: false,
-      fixedText: "", loading: false, blockId: "", slotId: "", histId: ""
+      fixedText: "", loading: false, blockId: "", slotId: "", histId: "", photo: ""
     };
     go("compose");
   }
@@ -7534,6 +7578,65 @@ window.SEED = {
     const i = c.styles.indexOf(id);
     if (i >= 0) c.styles.splice(i, 1); else c.styles.push(id);
     render();
+  }
+
+  /* ---------- 照片生成文案 ---------- */
+  function pickComposePhoto() {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "image/*";
+    inp.onchange = function () {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { toast("照片不能超过 5MB"); return; }
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const c = ensureCompose();
+        c.photo = e.target.result; // dataURL
+        render();
+      };
+      reader.readAsDataURL(f);
+    };
+    inp.click();
+  }
+  function clearComposePhoto() {
+    ensureCompose().photo = "";
+    render();
+  }
+
+  // 根据照片生成朋友圈文案：调后端 /ai/vision（智谱视觉模型）
+  async function generateFromPhoto() {
+    const c = ensureCompose();
+    if (!c.photo) { toast("先上传一张照片"); return; }
+    c.loading = true;
+    c.replaced = false;
+    render();
+    const cfg = aiCfg().text;
+    const base = aiBaseOf(cfg);
+    if (!base) { c.loading = false; render(); toast("未配置后端地址"); return; }
+    const digest = String((store && store.personaDigest) || "").trim();
+    try {
+      const headers = { "Content-Type": "application/json" };
+      const auth = aiAuthOf(cfg);
+      if (auth) headers["Authorization"] = "Bearer " + auth;
+      if (cfg.backend && cfg.key) headers["X-Pyq-Token"] = cfg.key;
+      const res = await fetch(base + "/ai/vision", {
+        method: "POST", headers: headers,
+        body: JSON.stringify({ image: c.photo, persona: digest, prompt: c.topic || "" })
+      });
+      const data = await res.json();
+      if (data.ok && data.text) {
+        finishCompose(c, cleanAIText(data.text));
+      } else {
+        c.loading = false;
+        render();
+        toast("照片生成失败：" + (data.error || "未知错误"));
+      }
+    } catch (e) {
+      c.loading = false;
+      render();
+      toast("网络错误：" + (e.message || "请检查后端连接"));
+    }
   }
 
   function toggleMaterial(id) {
@@ -9565,6 +9668,7 @@ window.SEED = {
   window.App = {
     tab, go, back, render, toast,
     pickType, setMode, setSize, setTopic, setDraftText, toggleStyle, toggleMaterial,
+    pickComposePhoto, clearComposePhoto, generateFromPhoto,
     generate, polish, applyFix, copy, saveDraft, toMaterials, addToSchedule, openDraft,
     setTopicFilter, openTopicPicker, useTopic, topicToCompose, openTopicSheet, saveTopic,
     setTopicScope, editTopic, updateTopic, delTopic, confirmDelTopic, copyTopic,
