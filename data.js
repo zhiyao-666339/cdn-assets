@@ -1,8 +1,8 @@
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 29,
-  APP_VERSION_NAME: "1.14.4",
+  APP_VERSION_CODE: 35,
+  APP_VERSION_NAME: "1.16.1",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -172,7 +172,7 @@ window.SEED = {
     cloud: {
       // pyq=自建服务器（默认）；supabase=旧版兼容
       mode: "pyq",
-      server: "",
+      server: "http://122.51.5.210:8787",
       url: "https://cvhbpiggofkpsynyplss.supabase.co",
       key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aGJwaWdnb2ZrcHN5bnlwbHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTk1NjksImV4cCI6MjEwODY3NTU2OX0.MQQT6To8tmYskadlPinZE_vExsQJf4n18dBrg6CA9NU",
       account: "",

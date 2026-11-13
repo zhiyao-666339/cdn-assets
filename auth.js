@@ -179,6 +179,7 @@
   }
 
   // 登录/注册成功后，自动用同一账号登录云端，让资料跟随账号（后台异步，不阻塞主流程）
+  // 云端没有该账号时自动创建，确保任何时期注册的用户都能无缝上云
   async function autoCloudSync(phone, password) {
     if (!cloudReady() || (window.Cloud && Cloud.hasSession && Cloud.hasSession())) return;
     try {
@@ -186,8 +187,19 @@
       if (r && r.ok) {
         try { await Cloud.reconcile(false); } catch (e) {}
         if (window.App && App.render) App.render(true);
+        return;
       }
-    } catch (e) { /* 云登录失败不影响本地登录 */ }
+      // 云端没有该账号（老用户 / 之前 server 未配置），自动创建并上传本地资料
+      const msg = (r && (r.error || r.msg)) || "";
+      if (/不存在|未注册|not found|no user/i.test(msg) || !r) {
+        const nickname = (window.Core && Core.store && Core.store.user && Core.store.user.name) || ("用户" + phone.slice(-4));
+        const sr = await Cloud.signUp(phone, password, nickname);
+        if (sr && sr.ok) {
+          await Cloud.push(true);
+          if (window.App && App.render) App.render(true);
+        }
+      }
+    } catch (e) { /* 云同步失败不影响本地登录 */ }
   }
 
   // 本地没有该账号（或密码不一致）时，用云端账号验证身份并自动补建本地账号

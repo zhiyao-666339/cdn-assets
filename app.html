@@ -2006,8 +2006,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 29,
-  APP_VERSION_NAME: "1.14.4",
+  APP_VERSION_CODE: 35,
+  APP_VERSION_NAME: "1.16.1",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -2177,7 +2177,7 @@ window.SEED = {
     cloud: {
       // pyq=自建服务器（默认）；supabase=旧版兼容
       mode: "pyq",
-      server: "",
+      server: "http://122.51.5.210:8787",
       url: "https://cvhbpiggofkpsynyplss.supabase.co",
       key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aGJwaWdnb2ZrcHN5bnlwbHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTk1NjksImV4cCI6MjEwODY3NTU2OX0.MQQT6To8tmYskadlPinZE_vExsQJf4n18dBrg6CA9NU",
       account: "",
@@ -6557,6 +6557,7 @@ window.SEED = {
   }
 
   // 登录/注册成功后，自动用同一账号登录云端，让资料跟随账号（后台异步，不阻塞主流程）
+  // 云端没有该账号时自动创建，确保任何时期注册的用户都能无缝上云
   async function autoCloudSync(phone, password) {
     if (!cloudReady() || (window.Cloud && Cloud.hasSession && Cloud.hasSession())) return;
     try {
@@ -6564,8 +6565,19 @@ window.SEED = {
       if (r && r.ok) {
         try { await Cloud.reconcile(false); } catch (e) {}
         if (window.App && App.render) App.render(true);
+        return;
       }
-    } catch (e) { /* 云登录失败不影响本地登录 */ }
+      // 云端没有该账号（老用户 / 之前 server 未配置），自动创建并上传本地资料
+      const msg = (r && (r.error || r.msg)) || "";
+      if (/不存在|未注册|not found|no user/i.test(msg) || !r) {
+        const nickname = (window.Core && Core.store && Core.store.user && Core.store.user.name) || ("用户" + phone.slice(-4));
+        const sr = await Cloud.signUp(phone, password, nickname);
+        if (sr && sr.ok) {
+          await Cloud.push(true);
+          if (window.App && App.render) App.render(true);
+        }
+      }
+    } catch (e) { /* 云同步失败不影响本地登录 */ }
   }
 
   // 本地没有该账号（或密码不一致）时，用云端账号验证身份并自动补建本地账号
