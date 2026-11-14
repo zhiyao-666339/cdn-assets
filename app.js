@@ -874,10 +874,7 @@
       { id: "custom", name: "自定义服务器地址", base: "", model: "glm-4-flash", backend: true }
     ],
     image: [
-      { id: "backend", name: "自建服务器（推荐 · 免费）", mode: "backend", base: "", model: "cogview-3-flash", backend: true },
-      { id: "free", name: "免费通道（无需 Key）", mode: "free", base: "", model: "" },
-      { id: "zhipu", name: "智谱直连 CogView", mode: "custom", base: "https://open.bigmodel.cn/api/paas/v4", model: "cogview-3-flash" },
-      { id: "openai", name: "OpenAI 兼容", mode: "custom", base: "", model: "gpt-image-1" }
+      { id: "backend", name: "自建服务器（推荐 · 免费）", mode: "backend", base: "", model: "cogview-3-flash", backend: true }
     ],
     video: [
       { id: "backend", name: "自建服务器（推荐）", base: "", model: "cogvideox-flash", backend: true },
@@ -890,13 +887,15 @@
     if (!store.settings.ai) store.settings.ai = {};
     const ai = store.settings.ai;
     if (!ai.text) ai.text = { backend: true, base: "", key: "", model: "glm-4-flash" };
-    if (!ai.image) ai.image = { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" };
+    if (!ai.image) ai.image = { mode: "backend", base: "", key: "", model: "cogview-3-flash", size: "1024x1024" };
     if (!ai.video) ai.video = { backend: true, base: "", key: "", model: "cogvideox-flash" };
-    if (!ai.moderate) ai.moderate = { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
-    if (!ai.image.mode) ai.image.mode = "free";
-    // AI 统一走自建后端：文案与视频强制 backend，不再提供直连 Key 模式
+    if (!ai.moderate) ai.moderate = { enabled: false, provider: "proxy", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" };
+    // AI 全部走自建后端：文案、图片、视频、云审都不再直连模型厂商
     ai.text.backend = true;
+    ai.image.mode = "backend";
+    ai.image.backend = true;
     ai.video.backend = true;
+    ai.moderate.provider = "proxy";
     // 旧版「内置模型」迁移为「自建后端代理」
     if (ai.text.builtin) {
       ai.text.base = ai.text.base || ai.text.proxyUrl || "";
@@ -1080,8 +1079,6 @@
     if (!p) return;
     const builtin = !!p.backend;
     if (kind === "image") {
-      const mode = document.getElementById("aiImageMode");
-      if (mode) mode.value = p.mode;
       const base = document.getElementById("aiImageBase");
       if (base) base.value = p.base;
       const model = document.getElementById("aiImageModel");
@@ -1106,12 +1103,10 @@
   // 切换「后端代理」时更新接口地址 / 令牌的提示
   function aiToggleBackend(kind) {
     const prefix = kind === "text" ? "aiText" : "aiVideo";
-    const cb = document.getElementById(prefix + "Backend");
-    const backend = !!(cb && cb.checked);
     const base = document.getElementById(prefix + "Base");
     const key = document.getElementById(prefix + "Key");
-    if (base) { base.placeholder = backend ? "https://你的代理域名/v1" : "https://open.bigmodel.cn/api/paas/v4"; }
-    if (key) { key.placeholder = backend ? "代理访问令牌（可留空）" : "在控制台获取"; }
+    if (base) base.placeholder = "https://你的自建服务器地址";
+    if (key) key.placeholder = "代理访问令牌（可留空）";
   }
 
   function aiSaveSettings() {
@@ -1122,32 +1117,22 @@
     ai.text.base = val("aiTextBase");
     ai.text.key = val("aiTextKey");
     ai.text.model = val("aiTextModel");
-    ai.image.mode = el("aiImageMode").value;
+    ai.image.mode = "backend";
+    ai.image.backend = true;
     ai.image.base = val("aiImageBase");
-    ai.image.key = val("aiImageKey");
+    ai.image.key = "";
     ai.image.model = val("aiImageModel");
-    ai.image.size = el("aiImageSize").value;
+    const imgSize = el("aiImageSize");
+    ai.image.size = imgSize ? imgSize.value : ai.image.size;
     ai.video.backend = true;
     ai.video.base = val("aiVideoBase");
     ai.video.key = val("aiVideoKey");
     ai.video.model = val("aiVideoModel");
-    // 云端审核
+    // 云端审核：统一走自建后端
     const modOn = document.getElementById("aiModerateEnabled");
-    const modProv = document.getElementById("aiModerateProvider");
     ai.moderate.enabled = !!(modOn && modOn.checked);
-    ai.moderate.provider = (modProv && modProv.value) || ai.moderate.provider;
-    const get = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
-    if (ai.moderate.provider === "zhipu") ai.moderate.apiKey = get("aiModZhipuKey");
-    else if (ai.moderate.provider === "tencent") {
-      ai.moderate.secretId = get("aiModTencentSid");
-      ai.moderate.secretKey = get("aiModTencentSkey");
-      ai.moderate.region = get("aiModTencentRegion") || "ap-guangzhou";
-    } else if (ai.moderate.provider === "alibaba") {
-      ai.moderate.secretId = get("aiModAlibabaAk");
-      ai.moderate.secretKey = get("aiModAlibabaSk");
-    } else if (ai.moderate.provider === "proxy") {
-      ai.moderate.proxyUrl = get("aiModProxyUrl");
-    }
+    ai.moderate.provider = "proxy";
+    ai.moderate.proxyUrl = val("aiModProxyUrl");
     save();
     render();
     toast("AI 模型设置已保存");
@@ -1168,42 +1153,41 @@
       return;
     }
     if (kind === "image") {
-      ai.image.mode = document.getElementById("aiImageMode").value;
-      ai.image.base = document.getElementById("aiImageBase").value.trim();
-      ai.image.key = document.getElementById("aiImageKey").value.trim();
-      ai.image.model = document.getElementById("aiImageModel").value.trim();
+      ai.image.mode = "backend";
+      ai.image.backend = true;
+      ai.image.base = (document.getElementById("aiImageBase") || {}).value ? document.getElementById("aiImageBase").value.trim() : "";
+      ai.image.model = (document.getElementById("aiImageModel") || {}).value ? document.getElementById("aiImageModel").value.trim() : "";
       save();
-      if (ai.image.mode === "free") { toast("免费通道无需配置，直接到「素材 → 生成图片」使用"); return; }
-      if (!ai.image.base || !ai.image.key) { toast("先填接口地址和 API Key"); return; }
-      if (!(window.NativeApp && NativeApp.available() && NativeApp.genImage)) { toast("自定义图片接口需在 App 内测试"); return; }
-      toast("正在测试图片接口…");
-      const r = await NativeApp.genImage(ai.image.base, ai.image.key, ai.image.model, "一只橘猫趴在窗台上晒太阳", ai.image.size);
-      toast(r && r.ok ? "图片接口连接成功，图片已存相册" : "图片接口失败：" + ((r && r.error) || ""));
+      const base = aiBaseOf(ai.image);
+      if (!base) { toast("先填自建服务器地址"); return; }
+      toast("正在测试自建图片后端…");
+      try {
+        const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers.Authorization = "Bearer " + token;
+        const res = await fetch(base + "/images/generations", {
+          method: "POST", headers,
+          body: JSON.stringify({ model: ai.image.model || "cogview-3-flash", prompt: "一只橘猫趴在窗台上晒太阳", size: ai.image.size || "1024x1024" })
+        });
+        const d = await res.json().catch(() => ({}));
+        const url = (d.data && d.data[0] && d.data[0].url) || d.url || "";
+        toast(url ? "图片后端连接成功" : "图片后端失败：" + (d.error || ("HTTP " + res.status)));
+      } catch (e) {
+        toast("图片后端请求失败：" + ((e && e.message) || e));
+      }
       return;
     }
     if (kind === "moderate") {
-      // 保存当前表单值到 store
-      const modProv = (document.getElementById("aiModerateProvider") || {}).value || ai.moderate.provider;
-      ai.moderate.provider = modProv;
-      if (modProv === "zhipu") ai.moderate.apiKey = (document.getElementById("aiModZhipuKey") || {}).value || ai.moderate.apiKey;
-      else if (modProv === "tencent") {
-        ai.moderate.secretId = (document.getElementById("aiModTencentSid") || {}).value || ai.moderate.secretId;
-        ai.moderate.secretKey = (document.getElementById("aiModTencentSkey") || {}).value || ai.moderate.secretKey;
-        ai.moderate.region = (document.getElementById("aiModTencentRegion") || {}).value || "ap-guangzhou";
-      } else if (modProv === "alibaba") {
-        ai.moderate.secretId = (document.getElementById("aiModAlibabaAk") || {}).value || ai.moderate.secretId;
-        ai.moderate.secretKey = (document.getElementById("aiModAlibabaSk") || {}).value || ai.moderate.secretKey;
-      } else if (modProv === "proxy") {
-        ai.moderate.proxyUrl = (document.getElementById("aiModProxyUrl") || {}).value || ai.moderate.proxyUrl;
-      }
+      ai.moderate.provider = "proxy";
+      ai.moderate.proxyUrl = (document.getElementById("aiModProxyUrl") || {}).value ? document.getElementById("aiModProxyUrl").value.trim() : ai.moderate.proxyUrl;
       save();
       // 用内置的 1x1 红色 JPEG（base64）作为测试文件，包装成 data URL
       const testB64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAr/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AV/9k=";
       const testDataUrl = "data:image/jpeg;base64," + testB64;
-      toast("正在测试云端审核（" + modProv + "）…");
+      toast("正在测试自建后端云审…");
       try {
         const r = await Core.moderateMedia(testDataUrl, "image");
-        if (!r) { toast("未开启云端审核或未配置代理地址"); return; }
+        if (!r) { toast("未开启云端审核或未配置服务器地址"); return; }
         const cat = (r.violations || []).map((v) => v.category).join("、");
         toast(r.passed ? "测试通过：未检测到违规（" + (r.provider || "") + "）" : "测试返回：" + (cat || "云端判定未通过") + "（" + (r.provider || "") + "）");
       } catch (e) {
@@ -1215,7 +1199,7 @@
     ai.video.key = document.getElementById("aiVideoKey").value.trim();
     ai.video.model = document.getElementById("aiVideoModel").value.trim();
     save();
-    if (!ai.video.base || !ai.video.key) { toast("先填接口地址和 API Key"); return; }
+    if (!aiBaseOf(ai.video)) { toast("先填自建服务器地址"); return; }
     toast("视频生成较慢，请到「素材 → 新增视频」里直接生成");
   }
 
@@ -1260,27 +1244,18 @@
   function openImageSheet() {
     const cfg = imageCfg();
     const presets = AI_PRESETS.image.map((p) =>
-      '<button class="chip small' + (p.id === "free" && cfg.mode === "free" ? " active" : "") +
-      '" onclick="App.aiImagePreset(\'' + p.id + '\')">' + p.name + "</button>"
+      '<button class="chip small active" onclick="App.aiImagePreset(\'' + p.id + '\')">' + p.name + "</button>"
     ).join("");
     openSheet(
       "<h3>AI 生成图片</h3>" +
       '<div class="field"><label>画面描述</label><textarea class="textarea" id="imgPrompt" rows="3" placeholder="例如：我的书桌，暖色台灯，真实生活感"></textarea></div>' +
-      '<div class="field"><label>通道</label>' +
-        '<select class="input" id="imgMode">' +
-          '<option value="free"' + (cfg.mode === "free" ? " selected" : "") + ">免费通道（无需 Key）</option>" +
-          '<option value="custom"' + (cfg.mode === "custom" ? " selected" : "") + ">自定义接口（OpenAI 兼容）</option>" +
-        "</select>" +
-      "</div>" +
       '<div class="chips" style="margin:-4px 0 10px">' + presets + "</div>" +
-      '<details class="api-box"' + (cfg.mode === "custom" ? " open" : "") + "><summary>自定义接口设置（填一次即可）</summary>" +
-        '<div class="field"><label>接口地址</label><input class="input" id="imgApiBase" placeholder="https://api.openai.com/v1" value="' + escapeHtml(cfg.base) + '" /></div>' +
-        '<div class="field"><label>API Key</label><input class="input" id="imgApiKey" type="password" placeholder="sk-..." value="' + escapeHtml(cfg.key) + '" /></div>' +
-        '<div class="field"><label>模型</label><input class="input" id="imgApiModel" placeholder="gpt-image-1 / cogview-3-flash" value="' + escapeHtml(cfg.model) + '" /></div>' +
+      '<details class="api-box"><summary>自建服务器设置（填一次即可）</summary>' +
+        '<div class="field"><label>自建服务器地址</label><input class="input" id="imgApiBase" placeholder="留空则用「账号与云同步」的地址" value="' + escapeHtml(cfg.base) + '" /></div>' +
+        '<div class="field"><label>模型</label><input class="input" id="imgApiModel" placeholder="cogview-3-flash" value="' + escapeHtml(cfg.model || "cogview-3-flash") + '" /></div>' +
         '<div class="field"><label>尺寸</label><input class="input" id="imgApiSize" placeholder="1024x1024" value="' + escapeHtml(cfg.size) + '" /></div>' +
-        '<div class="muted" style="font-size:11px">Key 只保存在本机，不会上传到任何服务器；公用手机请勿填写。</div>' +
       "</details>" +
-      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>免费通道由 Pollinations 提供，无需注册和 Key；描述会先过合规检测，命中风险词直接拦截；生成成功的图片自动存入相册。</span></div>" +
+      '<div class="hint" style="margin-bottom:10px">' + icon("shield", 13) + "<span>图片全部由自建服务器生成，模型 Key 只保存在服务器上；描述会先过合规检测，命中风险词直接拦截；生成成功的图片自动存入相册。</span></div>" +
       '<div class="sheet-actions"><button class="btn ghost" onclick="App.closeSheet()">取消</button>' +
       '<button class="btn primary" onclick="App.generateImage()">生成</button></div>'
     );
@@ -1290,13 +1265,9 @@
   function aiImagePreset(id) {
     const p = AI_PRESETS.image.find((x) => x.id === id);
     if (!p) return;
-    const mode = document.getElementById("imgMode");
-    if (mode) mode.value = p.mode;
-    const base = document.getElementById("imgApiBase");
-    if (base && p.base) base.value = p.base;
     const model = document.getElementById("imgApiModel");
     if (model && p.model) model.value = p.model;
-    toast(p.mode === "free" ? "已切换到免费通道，无需填写 Key" : "已填入「" + p.name + "」，还需填写 API Key");
+    toast("图片由自建服务器生成，无需填写任何模型 Key");
   }
 
   // 把生成好的图片 URL 存入素材库 / 相册 / 生成记录
@@ -1325,25 +1296,15 @@
     toast(saved ? "图片已生成并保存到手机相册" : "图片已生成，点图片可预览 / 保存");
   }
 
-  // 免费图片：Pollinations 直接 GET 返回图片，无需 Key
-  async function generateFreeImage(prompt, size) {
-    const dim = String(size || "1024x1024").split("x");
-    const w = parseInt(dim[0], 10) || 1024;
-    const h = parseInt(dim[1], 10) || 1024;
-    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) +
-      "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Date.now();
-    await applyGeneratedImage(url, prompt, "AI 生成 · 免费通道");
-  }
-
   async function generateImage() {
     const prompt = document.getElementById("imgPrompt").value.trim();
     if (!prompt) { toast("先写画面描述"); return; }
     const cfg = imageCfg();
-    cfg.mode = document.getElementById("imgMode").value;
-    cfg.base = document.getElementById("imgApiBase").value.trim();
-    cfg.key = document.getElementById("imgApiKey").value.trim();
-    cfg.model = document.getElementById("imgApiModel").value.trim();
-    cfg.size = document.getElementById("imgApiSize").value;
+    cfg.mode = "backend";
+    cfg.backend = true;
+    cfg.base = (document.getElementById("imgApiBase") || {}).value ? document.getElementById("imgApiBase").value.trim() : "";
+    cfg.model = (document.getElementById("imgApiModel") || {}).value ? document.getElementById("imgApiModel").value.trim() : "";
+    cfg.size = (document.getElementById("imgApiSize") || {}).value ? document.getElementById("imgApiSize").value : "1024x1024";
     save();
 
     const check = Core.checkText(prompt);
@@ -1361,75 +1322,27 @@
 
     closeSheet();
 
-    // 免费通道：无需 Key，App 内下载入相册，网页版直接用图片地址
-    if (cfg.mode === "free") {
-      await generateFreeImage(prompt, cfg.size);
-      return;
-    }
-
-    // 自建后端代理：走 /images/generations，无需用户填 Key，App 和网页版都能用
-    if (cfg.mode === "backend" || cfg.backend) {
-      const base = aiServerBase() || cfg.base;
-      if (!base) { toast("请先在「云同步」里配置自建服务器地址"); return; }
-      toast("正在生成图片，请稍候…");
-      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
-      try {
-        const headers = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = "Bearer " + token;
-        const res = await fetch(base + "/images/generations", {
-          method: "POST", headers,
-          body: JSON.stringify({ model: cfg.model || "cogview-3-flash", prompt: prompt, size: cfg.size || "1024x1024" })
-        });
-        const txt = await res.text();
-        let d; try { d = JSON.parse(txt); } catch (e) { d = {}; }
-        if (!res.ok || !d) { toast("生成失败：HTTP " + res.status + " " + txt.slice(0, 80)); return; }
-        // 智谱返回格式：{ data: [{ url: "..." }] }
-        const url = (d.data && d.data[0] && d.data[0].url) || d.url || "";
-        if (!url) { toast("生成失败：未返回图片地址"); return; }
-        await applyGeneratedImage(url, prompt, "AI 生成");
-      } catch (e) {
-        toast("请求失败：" + ((e && e.message) || e));
-      }
-      return;
-    }
-
-    if (!(window.NativeApp && NativeApp.available() && NativeApp.genImage)) { toast("自定义图片接口需在 App 内使用"); return; }
-    if (!cfg.base || !cfg.key) { toast("请先填写接口地址和 API Key，或切换到免费通道"); return; }
-
+    const base = aiBaseOf(cfg);
+    if (!base) { toast("请先在「账号与云同步」配置自建服务器地址"); return; }
     toast("正在生成图片，请稍候…");
-    const r = await NativeApp.genImage(cfg.base, cfg.key, cfg.model, prompt, cfg.size);
-    if (!r || !r.ok) {
-      const e = (r && r.error) || "生成失败";
-      if (/违规|敏感|安全|policy|safety|moderat|blocked|reject|风险/i.test(e)) {
-        recordMedia({
-          kind: "image", status: "已拦截", title: prompt, source: "AI 生成",
-          reason: "接口安全拦截：" + e
-        });
-        render();
-        toast("图片被接口拦截，已记入生成记录");
-        return;
-      }
-      toast(e);
-      return;
+    const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      const res = await fetch(base + "/images/generations", {
+        method: "POST", headers,
+        body: JSON.stringify({ model: cfg.model || "cogview-3-flash", prompt: prompt, size: cfg.size || "1024x1024" })
+      });
+      const txt = await res.text();
+      let d; try { d = JSON.parse(txt); } catch (e) { d = {}; }
+      if (!res.ok || !d) { toast("生成失败：HTTP " + res.status + " " + txt.slice(0, 80)); return; }
+      // 智谱返回格式：{ data: [{ url: "..." }] }
+      const url = (d.data && d.data[0] && d.data[0].url) || d.url || "";
+      if (!url) { toast("生成失败：未返回图片地址"); return; }
+      await applyGeneratedImage(url, prompt, "AI 生成");
+    } catch (e) {
+      toast("请求失败：" + ((e && e.message) || e));
     }
-
-    const m = {
-      id: uid("img"), kind: "image", source: "AI 生成", prompt: prompt,
-      src: r.thumb || r.url || "", url: r.url || "", saved: !!r.saved, time: nowISO()
-    };
-    store.materials.images.unshift(m);
-    // 缩略图过大时降级为原图地址，避免本地存储写满
-    if (!save()) { m.src = m.url || ""; save(); }
-    recordMedia({
-      kind: "image", status: "已通过", title: prompt, source: "AI 生成",
-      media: { src: m.src, url: m.url, prompt: prompt }
-    });
-    queueItem(
-      "素材库/图片库/AI 生成", m.id + "_图片说明.txt",
-      "提示词：" + prompt + "\n图片地址：" + (m.url || "见相册") + "\n生成时间：" + m.time
-    );
-    render();
-    toast(r.saved ? "图片已生成并保存到手机相册" : "图片已生成，点图片可预览 / 保存");
   }
 
   /* ---------- 图片 / 视频预览与保存 ---------- */

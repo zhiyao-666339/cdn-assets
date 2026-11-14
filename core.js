@@ -451,54 +451,23 @@
     }
     if (!b64) return { passed: true, count: 0, violations: [], note: "云端审核跳过：无文件数据" };
 
-    // App 内走原生 Bridge
-    if (window.NativeApp && NativeApp.available() && NativeApp.aiModerate) {
-      const provider = cfg.provider || "zhipu";
-      const s1 = cfg.secretId || cfg.apiKey || "";
-      const s2 = cfg.secretKey || "";
-      const region = cfg.region || "ap-guangzhou";
-      try {
-        const r = await NativeApp.aiModerate(provider, s1, s2, region, kind, b64, mime);
-        if (!r || !r.ok) {
-          return { passed: true, count: 0, violations: [{
-            category: "云审异常", word: "", reason: (r && r.error) || "云端审核请求失败",
-            suggestion: "请检查审核服务配置"
-          }], provider };
-        }
-        const v = (r.violations || []).map((vi) => ({
-          word: vi.word || "", category: vi.category || "云审违规",
-          reason: (vi.reason || "云端检测未通过") + (r.provider ? "（" + r.provider + "）" : ""),
-          suggestion: vi.suggestion || "删除后重新发布",
-          provider: r.provider
-        }));
-        return {
-          passed: !r.blocked,
-          count: v.length,
-          violations: v,
-          provider: r.provider || provider
-        };
-      } catch (e) {
-        return { passed: true, count: 0, violations: [{
-          category: "云审异常", word: "", reason: "原生审核调用失败：" + (e.message || e),
-          suggestion: "请重启 App 或关闭云端审核"
-        }] };
-      }
-    }
-
-    // 网页版走自建代理（用户填 proxyUrl，代理持签名密钥）
-    const proxyUrl = cfg.proxyUrl || "";
+    // 统一走自建后端 /moderate：模型密钥只保存在服务器
+    const cloud = (store.settings && store.settings.cloud) || {};
+    const proxyUrl = String(cfg.proxyUrl || cloud.server || "").trim();
     if (!proxyUrl) return { passed: true, count: 0, violations: [{
       category: "云审未配置", word: "",
-      reason: "网页版云端审核需要用户自建代理（密钥不能放浏览器）",
-      suggestion: "填一个自建代理地址，或关闭云端审核"
+      reason: "云端审核需要自建服务器地址",
+      suggestion: "在「账号与云同步」填写自建服务器地址，或关闭云端审核"
     }] };
 
     try {
+      const headers = { "Content-Type": "application/json" };
+      const token = (window.Cloud && Cloud.token) ? Cloud.token() : "";
+      if (token) headers.Authorization = "Bearer " + token;
       const res = await fetch(proxyUrl.replace(/\/+$/, "") + "/moderate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: headers,
         body: JSON.stringify({
-          provider: cfg.provider || "zhipu",
           task: kind,
           fileBase64: b64,
           mimeType: mime

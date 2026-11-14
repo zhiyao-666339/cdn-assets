@@ -1,8 +1,8 @@
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 38,
-  APP_VERSION_NAME: "1.17.1",
+  APP_VERSION_CODE: 39,
+  APP_VERSION_NAME: "1.17.2",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -160,11 +160,11 @@ window.SEED = {
     // AI 全部走自建后端（pyq-server）：模型密钥只在服务器，前端不保存
     ai: {
       text: { backend: true, base: "", key: "", model: "glm-4-flash" },
-      // 图片默认走免费通道（Pollinations，无需 Key）；custom 则用 base/key 调自有接口
-      image: { mode: "free", base: "", key: "", model: "gpt-image-1", size: "1024x1024" },
+      // 图片同样走自建后端：服务器上调用 CogView，前端不需要任何 Key
+      image: { mode: "backend", backend: true, base: "", key: "", model: "cogview-3-flash", size: "1024x1024" },
       video: { backend: true, base: "", key: "", model: "cogvideox-flash" },
-      // 云端媒体审核：默认关闭；zhipu 免费额度最多，tencent/alibaba 需注册
-      moderate: { enabled: false, provider: "zhipu", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
+      // 云端媒体审核：默认关闭；开启后统一走自建后端 /moderate
+      moderate: { enabled: false, provider: "proxy", apiKey: "", secretId: "", secretKey: "", region: "ap-guangzhou", proxyUrl: "" }
     },
     // 兼容旧版图片接口配置，迁移后不再使用
     imageApi: { base: "", key: "", model: "gpt-image-1", size: "1024x1024" },

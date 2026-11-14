@@ -1,21 +1,21 @@
 {
   "schema": 2,
-  "versionCode": 34,
-  "versionName": "1.17.1",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.17.1.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.17.1.apk",
-  "size": 2755380,
-  "md5": "b6cd027a675a24cda9eb31f933f0459f",
+  "versionCode": 35,
+  "versionName": "1.17.2",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.17.2.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.17.2.apk",
+  "size": 2749692,
+  "md5": "afb82144d9b30c98000517a375ecdd1a",
   "notes": [
-    "修复账号合并：老用户升级后自动补齐云服务器，无需手动填写",
-    "修复老账号上云：本地登录成功但云端无账号时，自动创建并上传资料",
-    "资料、日记、素材与历史跟随同一账号，换手机登录可恢复",
-    "保留照片生成文案、日记、邮箱验证码与云端长期在线功能"
+    "AI 模型全部改走自建后端和自建服务器，前端不再保存任何模型厂商密钥",
+    "图片生成改为服务器统一调用 CogView，移除第三方免费图片通道",
+    "云端画面审核统一走自建后端 /moderate，不再直连智谱、腾讯云、阿里云",
+    "文案、图片、视频、照片理解均使用同一台自建服务器，登录后自动携带身份令牌"
   ],
-  "webBuild": 38,
-  "webName": "1.17.1",
+  "webBuild": 39,
+  "webName": "1.17.2",
   "webNotes": [
-    "修复老用户账号合并：自动补齐云服务器并自动创建云端账号",
-    "登录一次即可同步资料，不再需要单独登录云账号"
+    "AI 全部走自建后端：文案、图片、视频、照片理解、画面审核",
+    "移除厂商直连和第三方免费图片通道，前端零密钥"
   ]
 }

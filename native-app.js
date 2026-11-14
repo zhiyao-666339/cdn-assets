@@ -136,17 +136,12 @@
     },
     checkUpdate: (manifestUrl) => call("checkUpdate", [manifestUrl]),
     installUpdate: (apkUrl) => call("installUpdate", [apkUrl]),
-    // AI 生成图片：走用户自己配置的接口，生成后直接存入相册
-    genImage: (base, key, model, prompt, size) => call("genImage", [base, key, model, prompt, size]),
     // AI 文案：OpenAI 兼容 chat/completions
     aiChat: (base, key, model, messagesJson) => call("aiChat", [base, key, model, messagesJson]),
     // AI 视频：智谱 CogVideoX 异步任务（创建 + 轮询）
     genVideo: (base, key, model, prompt) => call("genVideo", [base, key, model, prompt]),
     // 把网络图片/视频保存到手机相册
     saveMediaUrl: (url, name, isVideo) => call("saveMediaUrl", [url, name, !!isVideo]),
-    // 云端媒体审核：provider(zhipu/tencent/alibaba) + 两档密钥 + region + task(image/video) + base64 + mime
-    aiModerate: (provider, secretIdOrKey, secretKey, region, task, payloadB64, mimeType) =>
-      call("aiModerate", [provider, secretIdOrKey, secretKey, region, task, payloadB64, mimeType]),
     builtinRules,
     toast: (msg) => { try { B.toast(String(msg)); } catch (e) {} },
     __cb: resolveCallback,
