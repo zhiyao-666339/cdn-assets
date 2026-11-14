@@ -1,23 +1,21 @@
 {
   "schema": 2,
-  "versionCode": 33,
-  "versionName": "1.17.0",
-  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.17.0.apk",
-  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.17.0.apk",
-  "size": 2755260,
-  "md5": "9318d8dbb930a071be7c590f3b3b4c32",
+  "versionCode": 34,
+  "versionName": "1.17.1",
+  "url": "https://zhiyao-666339.github.io/cdn-assets/PyqAssistant-v1.17.1.apk",
+  "mirror": "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/PyqAssistant-v1.17.1.apk",
+  "size": 2755380,
+  "md5": "b6cd027a675a24cda9eb31f933f0459f",
   "notes": [
-    "新增照片生成文案：写文案页上传照片，AI 识别照片内容自动写朋友圈（智谱视觉模型）",
-    "新增日记模块：我的 → 我的日记，可记录心情/天气，日记纳入 AI 学习，写文案更像本人",
-    "新增邮箱验证码登录：账号支持手机号或邮箱，无需短信资质即可收发验证码",
-    "账号合并：登录自动云同步，不再需要手动登录云账号",
-    "云端同步：日记内容跟随账号，换手机登录自动恢复"
+    "修复账号合并：老用户升级后自动补齐云服务器，无需手动填写",
+    "修复老账号上云：本地登录成功但云端无账号时，自动创建并上传资料",
+    "资料、日记、素材与历史跟随同一账号，换手机登录可恢复",
+    "保留照片生成文案、日记、邮箱验证码与云端长期在线功能"
   ],
-  "webBuild": 37,
-  "webName": "1.17.0",
+  "webBuild": 38,
+  "webName": "1.17.1",
   "webNotes": [
-    "新增照片生成文案：写文案页上传照片，AI 识别照片内容自动写朋友圈（智谱视觉模型）",
-    "修复账号合并：登录自动云同步，不再需要手动登录云账号",
-    "日记模块 + 邮箱验证码登录 + 后端 SMTP"
+    "修复老用户账号合并：自动补齐云服务器并自动创建云端账号",
+    "登录一次即可同步资料，不再需要单独登录云账号"
   ]
 }

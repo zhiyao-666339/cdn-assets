@@ -191,7 +191,7 @@
       }
       // 云端没有该账号（老用户 / 之前 server 未配置），自动创建并上传本地资料
       const msg = (r && (r.error || r.msg)) || "";
-      if (/不存在|未注册|not found|no user/i.test(msg) || !r) {
+      if (/不存在|未注册|not found|no user|账号或密码不正确|invalid|401/i.test(msg) || !r) {
         const nickname = (window.Core && Core.store && Core.store.user && Core.store.user.name) || ("用户" + phone.slice(-4));
         const sr = await Cloud.signUp(phone, password, nickname);
         if (sr && sr.ok) {

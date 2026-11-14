@@ -2035,8 +2035,8 @@ img.hist-media { cursor: pointer; }
 /* 初始数据：与飞书云盘「朋友圈 AI 助手」现有资料保持一致 */
 window.SEED = {
   // 当前构建版本号（网页版用它跟远程 version.json 比对，提示刷新）
-  APP_VERSION_CODE: 37,
-  APP_VERSION_NAME: "1.17.0",
+  APP_VERSION_CODE: 38,
+  APP_VERSION_NAME: "1.17.1",
   // 网页版版本清单地址（前端自动更新用）——与 index.html pyq-update 一致
   versionJsonUrl: "https://cdn.jsdelivr.net/gh/zhiyao-666339/cdn-assets@main/version.json",
   /* 个人资料默认为空：注册登录后由使用者自行填写 */
@@ -2674,6 +2674,7 @@ window.SEED = {
           const seedCloud = (window.SEED && SEED.settings && SEED.settings.cloud) || {};
           if (!s.settings.cloud.mode) s.settings.cloud.mode = "pyq";
           if (typeof s.settings.cloud.server !== "string") s.settings.cloud.server = "";
+          if (!s.settings.cloud.server && seedCloud.server) s.settings.cloud.server = seedCloud.server;
           if (!s.settings.cloud.url && seedCloud.url) s.settings.cloud.url = seedCloud.url;
           if (!s.settings.cloud.key && seedCloud.key) s.settings.cloud.key = seedCloud.key;
           if (typeof s.settings.cloud.auto !== "boolean") s.settings.cloud.auto = true;
@@ -6613,7 +6614,7 @@ window.SEED = {
       }
       // 云端没有该账号（老用户 / 之前 server 未配置），自动创建并上传本地资料
       const msg = (r && (r.error || r.msg)) || "";
-      if (/不存在|未注册|not found|no user/i.test(msg) || !r) {
+      if (/不存在|未注册|not found|no user|账号或密码不正确|invalid|401/i.test(msg) || !r) {
         const nickname = (window.Core && Core.store && Core.store.user && Core.store.user.name) || ("用户" + phone.slice(-4));
         const sr = await Cloud.signUp(phone, password, nickname);
         if (sr && sr.ok) {

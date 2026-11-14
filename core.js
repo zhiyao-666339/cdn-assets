@@ -132,6 +132,7 @@
           const seedCloud = (window.SEED && SEED.settings && SEED.settings.cloud) || {};
           if (!s.settings.cloud.mode) s.settings.cloud.mode = "pyq";
           if (typeof s.settings.cloud.server !== "string") s.settings.cloud.server = "";
+          if (!s.settings.cloud.server && seedCloud.server) s.settings.cloud.server = seedCloud.server;
           if (!s.settings.cloud.url && seedCloud.url) s.settings.cloud.url = seedCloud.url;
           if (!s.settings.cloud.key && seedCloud.key) s.settings.cloud.key = seedCloud.key;
           if (typeof s.settings.cloud.auto !== "boolean") s.settings.cloud.auto = true;
